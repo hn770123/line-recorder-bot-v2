@@ -1,0 +1,13 @@
+name = "line-recorder-bot-v2"
+main = "src/index.tsx"
+compatibility_date = "2026-02-03"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "line-recorder-bot-v2-db"
+database_id = "" # Add your database id here
+
+[vars]
+LINE_CHANNEL_ACCESS_TOKEN = ""
+LINE_CHANNEL_SECRET = ""

@@ -1,0 +1,31 @@
+{
+  "name": "line-recorder-bot-v2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest",
+    "coverage": "vitest run --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hn770123/line-recorder-bot-v2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/hn770123/line-recorder-bot-v2/issues"
+  },
+  "homepage": "https://github.com/hn770123/line-recorder-bot-v2#readme",
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20260131.0",
+    "@google/generative-ai": "^0.24.1",
+    "hono": "^4.11.7"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.18",
+    "vitest": "^4.0.18"
+  }
+}
