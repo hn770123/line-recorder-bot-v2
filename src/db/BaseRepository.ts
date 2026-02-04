@@ -19,6 +19,7 @@ export interface Env {
   LINE_CHANNEL_ACCESS_TOKEN: string;
   LINE_CHANNEL_SECRET: string;
   GEMINI_API_KEY: string;
+  BYPASS_LINE_VALIDATION: string;
 }
 
 export class BaseRepository {

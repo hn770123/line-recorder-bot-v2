@@ -48,15 +48,19 @@ export class LineWebhookHandler {
     const body = await c.req.text();
     const lineClient = new LineClient(c.env);
 
-    if (!signature) {
-      console.error('X-Line-Signature header is missing.');
-      return c.json({ message: 'Bad Request: X-Line-Signature header is missing.' }, 400);
-    }
+    if (c.env.BYPASS_LINE_VALIDATION !== "true") {
+      if (!signature) {
+        console.error('X-Line-Signature header is missing.');
+        return c.json({ message: 'Bad Request: X-Line-Signature header is missing.' }, 400);
+      }
 
-    const isValid = await lineClient.validateSignature(signature, body);
-    if (!isValid) {
-      console.error('Invalid LINE signature.');
-      return c.json({ message: 'Unauthorized: Invalid LINE signature.' }, 401);
+      const isValid = await lineClient.validateSignature(signature, body);
+      if (!isValid) {
+        console.error('Invalid LINE signature.');
+        return c.json({ message: 'Unauthorized: Invalid LINE signature.' }, 401);
+      }
+    } else {
+      console.warn('LINE signature validation bypassed as BYPASS_LINE_VALIDATION is true.');
     }
 
     const services: ServiceCollection = {
