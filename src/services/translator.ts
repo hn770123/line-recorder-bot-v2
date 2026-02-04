@@ -22,22 +22,20 @@ export class TranslationService {
   /**
    * @method detectLanguage
    * @description テキストの言語を検出します。
-   *              簡易的な検出ロジックのため、より高度なものが必要な場合は外部APIを検討。
    * @param {string} text 検出するテキスト
-   * @returns {string} 検出された言語コード (例: 'ja', 'en', 'pl')
+   * @returns {'ja' | 'pl' | 'en'} 検出された言語コード
    */
-  private detectLanguage(text: string): string {
-    // 非常に簡易的な言語検出（実際にはより堅牢なライブラリやサービスを使用すべき）
-    // 日本語のひらがな、カタカナ、漢字がある程度含まれていれば日本語と判断
-    if (/[ぁ-んァ-ヶ一- universally-accepted-japanese-symbols]/.test(text)) {
+  private detectLanguage(text: string): 'ja' | 'pl' | 'en' {
+    // 日本語のひらがな、カタカナ、漢字のいずれかが含まれているか
+    if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text)) {
       return 'ja';
     }
-    // ポーランド語の特殊文字が含まれていればポーランド語と判断
-    // ąćęłńóśźżĄĆĘŁŃÓŚŹŻ
+    // ポーランド語の特殊文字が含まれているか
     if (/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(text)) {
       return 'pl';
     }
-    return 'en'; // デフォルトは英語
+    // デフォルトは英語
+    return 'en';
   }
 
   /**
@@ -47,7 +45,7 @@ export class TranslationService {
    * @param {string} userId 投稿者のユーザーID
    * @param {string | null} roomId 投稿があったルームID (個人チャットの場合はnull)
    * @param {string} messageText 翻訳する元のメッセージテキスト
-   * @returns {Promise<string | null>} 翻訳されたテキスト、または翻訳に失敗した場合はnull
+   * @returns {Promise<string | null>} 翻訳されたテキスト(複数言語の場合は改行区切り)、または翻訳不要/失敗の場合はnull
    */
   async translateMessage(
     postId: string,
@@ -55,63 +53,74 @@ export class TranslationService {
     roomId: string | null,
     messageText: string
   ): Promise<string | null> {
-    const detectedLanguage = this.detectLanguage(messageText);
+    const sourceLang = this.detectLanguage(messageText);
+    let targetLangs: ('ja' | 'pl' | 'en')[] = [];
 
-    // 翻訳が必要な場合のみ処理
-    if (detectedLanguage === 'ja') { // 日本語からの翻訳を想定
-      const context = await this.getContext(roomId);
-      const prompt = this.createTranslationPrompt(messageText, context);
+    if (sourceLang === 'ja') {
+      targetLangs = ['en', 'pl'];
+    } else if (sourceLang === 'en' || sourceLang === 'pl') {
+      targetLangs = ['ja'];
+    } else {
+      // 翻訳が不要なケース
+      return null;
+    }
 
+    const context = await this.getContext(userId, roomId);
+    const translations: string[] = [];
+
+    for (const targetLang of targetLangs) {
+      const prompt = this.createTranslationPrompt(messageText, context, sourceLang, targetLang);
       try {
-        const translatedText = await this.geminiClient.generateText(
-          prompt,
-          context.map(post => ({ role: 'user', parts: post.message_text || '' })), // Geminiの履歴形式に変換
-          3 // リトライ回数
-        );
+        const translatedText = await this.geminiClient.generateText(prompt);
+        translations.push(`[${targetLang.toUpperCase()}] ${translatedText}`);
 
-        // 翻訳結果をpostsテーブルに保存
-        await this.postRepository.updateTranslatedText(postId, translatedText);
-
-        // 翻訳ログを保存
-        await this.logRepository.createTranslationLog({
-          timestamp: new Date().toISOString(),
-          user_id: userId,
-          language: detectedLanguage,
-          original_message: messageText,
-          translation: translatedText,
-          prompt: prompt,
-          history_count: context.length,
-        });
-
-        return translatedText;
+        // 最初の翻訳成功時にログを記録
+        if (translations.length === 1) {
+          await this.logRepository.createTranslationLog({
+            timestamp: new Date().toISOString(),
+            user_id: userId,
+            language: sourceLang,
+            original_message: messageText,
+            translation: translatedText, // 最初の翻訳結果を記録
+            prompt: prompt,
+            history_count: context.length,
+          });
+        }
       } catch (error) {
-        console.error('Translation failed:', error);
+        console.error(`Translation from ${sourceLang} to ${targetLang} failed:`, error);
         await this.logRepository.createDebugLog({
           timestamp: new Date().toISOString(),
-          message: `Translation error for post ${postId}: ${error instanceof Error ? error.message : String(error)}`,
+          message: `Translation error for post ${postId} (${sourceLang} -> ${targetLang}): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           stack: error instanceof Error ? error.stack : null,
         });
-        return null;
+        // 1つでも翻訳に失敗したら、そこで処理を中断することも検討できるが、一旦続行する
       }
     }
-    return null; // 翻訳不要な場合はnullを返す
+
+    if (translations.length > 0) {
+      const combinedTranslations = translations.join('\n');
+      await this.postRepository.updateTranslatedText(postId, combinedTranslations);
+      return combinedTranslations;
+    }
+
+    return null;
   }
 
   /**
    * @method getContext
    * @description 翻訳のための会話コンテキストを取得します。
-   *              直近の2つのメッセージをPostRepositoryから取得します。
+   * @param {string} userId ユーザーID
    * @param {string | null} roomId 会話が行われているルームID。nullの場合は個人チャット。
    * @returns {Promise<Post[]>} 直近のメッセージの配列
    */
-  private async getContext(roomId: string | null): Promise<Post[]> {
+  private async getContext(userId: string, roomId: string | null): Promise<Post[]> {
+    const CONTEXT_LIMIT = 2;
     if (roomId) {
-      // ルームIDがある場合は、そのルームのメッセージ履歴を取得
-      return await this.postRepository.findLatestPostsByRoomId(roomId, 2);
+      return await this.postRepository.findLatestPostsByRoomId(roomId, CONTEXT_LIMIT);
     } else {
-      // 個人チャットの場合は、現時点ではコンテキストなしとするか、ユーザーIDで履歴を取得する
-      // TODO: 個人チャットの履歴取得ロジックを追加
-      return [];
+      return await this.postRepository.findLatestPostsByUserId(userId, CONTEXT_LIMIT);
     }
   }
 
@@ -120,53 +129,53 @@ export class TranslationService {
    * @description Gemini APIに渡す翻訳プロンプトを構築します。
    * @param {string} messageText 翻訳対象のメッセージ
    * @param {Post[]} context 会話のコンテキスト
-   * @param {string} sourceLang 元のメッセージの言語コード (例: 'ja', 'en', 'pl')
-   * @param {string} targetLang 翻訳先の言語コード (例: 'ja', 'en', 'pl')
+   * @param {'ja' | 'pl' | 'en'} sourceLang 元のメッセージの言語コード
+   * @param {'ja' | 'pl' | 'en'} targetLang 翻訳先の言語コード
    * @returns {string} 構築されたプロンプト
    */
-  private createTranslationPrompt(messageText: string, context: Post[], sourceLang: string, targetLang: string): string {
-    let contextString = '';
-    if (context.length > 0) {
-      contextString = context
-        .map(post => `${post.user_id}: ${post.message_text || ''}`)
-        .filter(s => s.trim() !== '')
-        .join('\n');
-    }
+  private createTranslationPrompt(
+    messageText: string,
+    context: Post[],
+    sourceLang: 'ja' | 'pl' | 'en',
+    targetLang: 'ja' | 'pl' | 'en'
+  ): string {
+    const contextString = context
+      .map(post => `> ${post.message_text || ''}`)
+      .reverse()
+      .join('\n');
 
     let roleplayInstruction: string;
     let translationInstruction: string;
 
-    if (sourceLang === 'ja' && targetLang === 'en') {
-      // 日本語話者（保護者）から英語話者（先生）への翻訳を想定
-      roleplayInstruction = 'あなたは日本語を英語に翻訳する、厳格だが優しいバレエ教師です。生徒の保護者が理解しやすいように、自然で丁寧な英語に翻訳してください。専門用語（例: ポアント、プリエ）はバレエ用語として適切に翻訳してください。';
-      translationInstruction = `以下の日本語のメッセージを英語に翻訳してください。`;
-    } else if (sourceLang === 'en' && targetLang === 'ja') {
-      // 英語話者（先生）から日本語話者（保護者）への翻訳を想定
-      roleplayInstruction = 'あなたは英語を日本語に翻訳する、厳格だが優しいバレエ教師です。保護者が理解しやすいように、自然で丁寧な日本語に翻訳してください。専門用語（例: plié, pointe）はバレエ用語として適切に翻訳してください。';
-      translationInstruction = `以下の英語のメッセージを日本語に翻訳してください。`;
-    } else if (sourceLang === 'ja' && targetLang === 'pl') {
-      // 日本語話者（保護者）からポーランド語話者（先生）への翻訳を想定
-      roleplayInstruction = 'あなたは日本語をポーランド語に翻訳する、厳格だが優しいバレエ教師です。生徒の保護者が理解しやすいように、自然で丁寧なポーランド語に翻訳してください。専門用語（例: ポアント、プリエ）はバレエ用語として適切に翻訳してください。';
-      translationInstruction = `以下の日本語のメッセージをポーランド語に翻訳してください。`;
-    } else if (sourceLang === 'pl' && targetLang === 'ja') {
-      // ポーランド語話者（先生）から日本語話者（保護者）への翻訳を想定
-      roleplayInstruction = 'あなたはポーランド語を日本語に翻訳する、厳格だが優しいバレエ教師です。保護者が理解しやすいように、自然で丁寧な日本語に翻訳してください。専門用語はバレエ用語として適切に翻訳してください。';
-      translationInstruction = `以下のポーランド語のメッセージを日本語に翻訳してください。`;
-    }
-    else {
-      // デフォルトの翻訳指示 (例: 英語から日本語、またはその他の組み合わせ)
-      roleplayInstruction = `あなたは${sourceLang}を${targetLang}に翻訳するプロの翻訳者です。自然な${targetLang}に翻訳してください。`;
-      translationInstruction = `以下の${sourceLang}のメッセージを${targetLang}に翻訳してください。`;
+    // Based on specs-on-cloudflareworker.md
+    if (sourceLang === 'ja') {
+      // 保護者(ja) -> 先生(en/pl)
+      roleplayInstruction = `You are a professional translator for a children's ballet school. Translate the following Japanese message from a parent into natural, polite ${
+        targetLang === 'en' ? 'English' : 'Polish'
+      }. Ballet-specific terms (e.g., ポアント, プリエ) should be translated appropriately.`;
+      translationInstruction = `Please translate the following Japanese message into ${
+        targetLang === 'en' ? 'English' : 'Polish'
+      }.`;
+    } else {
+      // 先生(en/pl) -> 保護者(ja)
+      roleplayInstruction = `あなたはバレエ教室のプロの翻訳者です。以下の${
+        sourceLang === 'en' ? '英語' : 'ポーランド語'
+      }のメッセージを、生徒の日本の保護者向けに、自然で丁寧な日本語に翻訳してください。先生の親しみやすい人柄が伝わるように、少し柔らかい表現を加えてください。バレエの専門用語は適切に翻訳してください。`;
+      translationInstruction = `以下のメッセージを日本語に翻訳してください。`;
     }
 
     return `
-      ${roleplayInstruction}
+# Role
+${roleplayInstruction}
 
-      過去の会話の文脈:
-      ${contextString || 'なし'}
+# Context (Recent conversation history)
+${contextString || 'None'}
 
-      ${translationInstruction}
-      ${messageText}
-    `;
+# Instruction
+${translationInstruction}
+---
+${messageText}
+---
+`;
   }
 }

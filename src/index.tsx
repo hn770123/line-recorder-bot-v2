@@ -12,7 +12,7 @@ app.use('*', logger())
 const webhookHandler = new LineWebhookHandler();
 
 // LINE WebhookからのPOSTリクエストを処理
-app.post('/webhook', async (c) => await webhookHandler.handleWebhook(c));
+app.post('/api/webhook', async (c) => await webhookHandler.handleWebhook(c));
 
 // PollResultHandlerをインスタンス化
 const pollResultHandler = new PollResultHandler();
