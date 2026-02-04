@@ -11,3 +11,4 @@ database_id = "36969a67-9a06-4cc4-972f-f528b1b17139" # Add your database id here
 [vars]
 LINE_CHANNEL_ACCESS_TOKEN = ""
 LINE_CHANNEL_SECRET = ""
+GEMINI_API_KEY = ""
