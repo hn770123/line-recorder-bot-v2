@@ -23,10 +23,12 @@ export interface LineProfile {
 export class LineClient {
   private channelAccessToken: string;
   private channelSecret: string;
+  private bypassLineValidation: boolean;
 
   constructor(env: Env) {
     this.channelAccessToken = env.LINE_CHANNEL_ACCESS_TOKEN;
     this.channelSecret = env.LINE_CHANNEL_SECRET;
+    this.bypassLineValidation = env.BYPASS_LINE_VALIDATION === 'true';
   }
 
   /**
@@ -102,6 +104,10 @@ export class LineClient {
    * @returns {Promise<boolean>} 署名が有効な場合はtrue、そうでない場合はfalse
    */
   async validateSignature(signature: string, body: string): Promise<boolean> {
+    if (this.bypassLineValidation) {
+      return true;
+    }
+
     // Web Crypto APIはWorkersで利用可能です。
     // https://developers.cloudflare.com/workers/runtime-apis/web-crypto/
     const encoder = new TextEncoder();
