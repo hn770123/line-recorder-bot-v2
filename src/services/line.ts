@@ -104,6 +104,8 @@ export class LineClient {
    * @returns {Promise<boolean>} 署名が有効な場合はtrue、そうでない場合はfalse
    */
   async validateSignature(signature: string, body: string): Promise<boolean> {
+    console.log(`[LineClient] validateSignature called. bypassLineValidation: ${this.bypassLineValidation}`); // Log 1
+
     if (this.bypassLineValidation) {
       return true;
     }
@@ -111,6 +113,7 @@ export class LineClient {
     // Web Crypto APIはWorkersで利用可能です。
     // https://developers.cloudflare.com/workers/runtime-apis/web-crypto/
     const encoder = new TextEncoder();
+    console.log(`[LineClient] Attempting to import HMAC key. channelSecret length: ${this.channelSecret ? this.channelSecret.length : 0}`); // Log 2
     const key = await crypto.subtle.importKey(
       'raw',
       encoder.encode(this.channelSecret),
