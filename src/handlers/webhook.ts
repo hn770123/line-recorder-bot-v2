@@ -142,8 +142,8 @@ export class LineWebhookHandler {
     }
 
     // ユーザーとルーム/グループ情報をupsert
-    const userProfile = await lineClient.getProfile(userId);
-    await userRepository.upsert({ user_id: userId, display_name: userProfile.displayName });
+    // LINEプロフィール取得処理を削除し、登録済みの場合は名前を変更しないように変更
+    await userRepository.createIfNotExists({ user_id: userId, display_name: "" });
 
     if (sourceId) {
       await roomRepository.upsert({ room_id: sourceId, room_name: null });

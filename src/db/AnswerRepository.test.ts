@@ -163,4 +163,23 @@ describe('AnswerRepository', () => {
     expect(mockD1.prepare).toHaveBeenCalledWith('SELECT * FROM answers WHERE poll_post_id = ?');
     expect(mockD1.bind).toHaveBeenCalledWith('P_POLL');
   });
+
+  it('should get answers with user names by poll post ID', async () => {
+    const mockAnswersWithNames = [
+      { answer_id: 'A001', timestamp: '2023-01-01T12:00:00Z', poll_post_id: 'P_POLL', user_id: 'U_RESP1', answer_value: 'OK', display_name: 'User 1' },
+      { answer_id: 'A002', timestamp: '2023-01-01T12:05:00Z', poll_post_id: 'P_POLL', user_id: 'U_RESP2', answer_value: 'NG', display_name: null },
+    ];
+    vi.spyOn(mockD1, 'prepare').mockReturnThis();
+    vi.spyOn(mockD1, 'bind').mockReturnThis();
+    vi.spyOn(mockD1, 'all').mockResolvedValueOnce({
+      results: mockAnswersWithNames,
+      success: true,
+      meta: { duration: 0, served_by: 'mock', changes: 0, last_row_id: 0 }
+    });
+
+    const answers = await answerRepository.getAnswersWithUserNames('P_POLL');
+    expect(answers).toEqual(mockAnswersWithNames);
+    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringContaining('LEFT JOIN users'));
+    expect(mockD1.bind).toHaveBeenCalledWith('P_POLL');
+  });
 });

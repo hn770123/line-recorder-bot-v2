@@ -48,4 +48,15 @@ export class UserRepository extends BaseRepository {
     `;
     return await this.execute<User>(query, [user.user_id, user.display_name]);
   }
+
+  /**
+   * @method createIfNotExists
+   * @description ユーザーが存在しない場合のみ作成します。既存の場合は何もしません。
+   * @param {User} user 作成するユーザーデータ
+   * @returns {Promise<D1Result<User>>} 操作の結果
+   */
+  async createIfNotExists(user: User): Promise<D1Result<User>> {
+    const query = 'INSERT OR IGNORE INTO users (user_id, display_name) VALUES (?, ?)';
+    return await this.execute<User>(query, [user.user_id, user.display_name]);
+  }
 }

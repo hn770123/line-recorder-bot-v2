@@ -103,4 +103,20 @@ describe('UserRepository', () => {
     expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringContaining('ON CONFLICT(user_id) DO UPDATE SET'));
     expect(mockD1.bind).toHaveBeenCalledWith('U101', 'Updated User');
   });
+
+  it('should create a user only if not exists', async () => {
+    const newUser: User = { user_id: 'U999', display_name: '' };
+    vi.spyOn(mockD1, 'prepare').mockReturnThis();
+    vi.spyOn(mockD1, 'bind').mockReturnThis();
+    vi.spyOn(mockD1, 'all').mockResolvedValueOnce({
+      results: [],
+      success: true,
+      meta: { duration: 0, served_by: 'mock', changes: 0, last_row_id: 0 }
+    });
+
+    const result = await userRepository.createIfNotExists(newUser);
+    expect(result.success).toBe(true);
+    expect(mockD1.prepare).toHaveBeenCalledWith('INSERT OR IGNORE INTO users (user_id, display_name) VALUES (?, ?)');
+    expect(mockD1.bind).toHaveBeenCalledWith('U999', '');
+  });
 });

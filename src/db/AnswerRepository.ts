@@ -76,4 +76,20 @@ export class AnswerRepository extends BaseRepository {
     const query = 'SELECT * FROM answers WHERE poll_post_id = ?';
     return await this.queryAll<Answer>(query, [pollPostId]);
   }
+
+  /**
+   * @method getAnswersWithUserNames
+   * @description 指定されたアンケート投稿IDに対する回答と、回答者の名前を取得します。
+   * @param {string} pollPostId アンケート対象の投稿ID
+   * @returns {Promise<(Answer & { display_name: string | null })[]>} 回答とユーザー名の配列
+   */
+  async getAnswersWithUserNames(pollPostId: string): Promise<(Answer & { display_name: string | null })[]> {
+    const query = `
+      SELECT a.*, u.display_name
+      FROM answers a
+      LEFT JOIN users u ON a.user_id = u.user_id
+      WHERE a.poll_post_id = ?
+    `;
+    return await this.queryAll<Answer & { display_name: string | null }>(query, [pollPostId]);
+  }
 }
