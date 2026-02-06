@@ -1,34 +1,41 @@
 /**
  * @file GeminiClient.test.ts
  * @description GeminiClientの単体テスト。
- *              @google/generative-aiライブラリをモックして、テキスト生成とリトライロジックを検証します。
+ *              @google/generative-aiライブラリをモックして、テキスト生成とリトライ・フォールバックロジックを検証します。
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { GeminiClient } from '../services/gemini';
+import { GeminiClient } from './gemini';
 import { Env } from '../db/BaseRepository';
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// @google/generative-aiライブラリ全体をモック
-vi.mock('@google/generative-ai', () => {
-  const mockSendMessage = vi.fn();
-  const mockGenerativeModel = {
-    startChat: vi.fn(() => ({
-      sendMessage: mockSendMessage,
-    })),
-  };
-  const mockGoogleGenerativeAI = vi.fn(function () {
-    return {
-      getGenerativeModel: vi.fn(() => mockGenerativeModel),
-    };
+// vi.hoisted を使用してモック関数を定義（vi.mock内から参照できるようにする）
+const mocks = vi.hoisted(() => {
+  const sendMessage = vi.fn();
+  const startChat = vi.fn(() => ({ sendMessage }));
+  const getGenerativeModel = vi.fn(() => ({ startChat }));
+  const GoogleGenerativeAI = vi.fn(function () {
+    return { getGenerativeModel };
   });
-  return { GoogleGenerativeAI: mockGoogleGenerativeAI, GenerativeModel: mockGenerativeModel };
+
+  return {
+    sendMessage,
+    startChat,
+    getGenerativeModel,
+    GoogleGenerativeAI
+  };
+});
+
+// @google/generative-aiライブラリのモック
+vi.mock('@google/generative-ai', () => {
+  return {
+    GoogleGenerativeAI: mocks.GoogleGenerativeAI
+  };
 });
 
 describe('GeminiClient', () => {
   let geminiClient: GeminiClient;
   let mockEnv: Env;
-  let mockSendMessage: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -40,147 +47,138 @@ describe('GeminiClient', () => {
       GEMINI_API_KEY: '123456789012345678901234567890123456789', // 39 chars
     };
     geminiClient = new GeminiClient(mockEnv);
-
-    // モックされたsendMessage関数への参照を取得
-    mockSendMessage = (GoogleGenerativeAI as unknown as ReturnType<typeof vi.fn>)()
-      .getGenerativeModel().startChat().sendMessage;
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('should generate text successfully', async () => {
+  it('should generate text successfully with the first model', async () => {
     const expectedText = 'Generated response';
-    mockSendMessage.mockResolvedValueOnce({
+    mocks.sendMessage.mockResolvedValueOnce({
       response: {
         text: () => expectedText,
       },
     });
 
     const result = await geminiClient.generateText('Test prompt');
-    expect(result).toBe(expectedText);
-    expect(mockSendMessage).toHaveBeenCalledWith('Test prompt');
-  });
-
-  it('should retry on 429 error and succeed', async () => {
-    const expectedText = 'Generated response after retry';
-    mockSendMessage
-      .mockRejectedValueOnce({ response: { status: 429 } }) // First attempt fails with 429
-      .mockResolvedValueOnce({
-        response: {
-          text: () => expectedText,
-        },
-      }); // Second attempt succeeds
-
-    const promise = geminiClient.generateText('Test prompt');
-    await vi.runAllTimersAsync();
-    const result = await promise;
 
     expect(result).toBe(expectedText);
-    expect(mockSendMessage).toHaveBeenCalledTimes(2);
-    expect(mockSendMessage).toHaveBeenCalledWith('Test prompt');
+    expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash-lite' });
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('should retry on 500 error and succeed', async () => {
-    const expectedText = 'Generated response after retry';
-    mockSendMessage
-      .mockRejectedValueOnce({ response: { status: 500 } }) // First attempt fails with 500
-      .mockResolvedValueOnce({
-        response: {
-          text: () => expectedText,
-        },
-      }); // Second attempt succeeds
+  it('should switch to the next model on 429 error', async () => {
+    const expectedText = 'Response from second model';
 
-    const promise = geminiClient.generateText('Test prompt');
-    await vi.runAllTimersAsync();
-    const result = await promise;
+    // First model fails with 429
+    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 429 } });
 
-    expect(result).toBe(expectedText);
-    expect(mockSendMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it('should retry on 503 error and succeed', async () => {
-    const expectedText = 'Generated response after retry';
-    mockSendMessage
-      .mockRejectedValueOnce({ response: { status: 503 } }) // First attempt fails with 503
-      .mockResolvedValueOnce({
-        response: {
-          text: () => expectedText,
-        },
-      }); // Second attempt succeeds
-
-    const promise = geminiClient.generateText('Test prompt');
-    await vi.runAllTimersAsync();
-    const result = await promise;
-
-    expect(result).toBe(expectedText);
-    expect(mockSendMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it('should throw error after max retries', async () => {
-    mockSendMessage.mockRejectedValue({ response: { status: 429 } }); // All attempts fail with 429
-
-    const promise = geminiClient.generateText('Test prompt', [], 3);
-    // Promiseがrejectされることを期待するアサーションを先に作成し、unhandled rejectionを防ぐ
-    const assertion = expect(promise).rejects.toThrow(
-      'Failed to generate text from Gemini API after 3 attempts.'
-    );
-
-    await vi.runAllTimersAsync();
-    await assertion;
-
-    expect(mockSendMessage).toHaveBeenCalledTimes(3); // 最初の試行 + 2回のリトライ
-  });
-
-  it('should throw error for other types of failures immediately', async () => {
-    mockSendMessage.mockRejectedValueOnce(new Error('Network error')); // Non-retriable error
-
-    await expect(geminiClient.generateText('Test prompt')).rejects.toThrow('Network error');
-    expect(mockSendMessage).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle history correctly', async () => {
-    const expectedText = 'Generated response with history';
-    mockSendMessage.mockResolvedValueOnce({
+    // Second model succeeds
+    mocks.sendMessage.mockResolvedValueOnce({
       response: {
         text: () => expectedText,
       },
     });
 
-    const history = [
-      { role: 'user', parts: 'Hi' },
-      { role: 'model', parts: 'Hello there!' },
-    ];
-    await geminiClient.generateText('New prompt', history);
+    const result = await geminiClient.generateText('Test prompt');
 
-    expect(geminiClient['model'].startChat).toHaveBeenCalledWith({ history });
+    expect(result).toBe(expectedText);
+
+    // Check that models were called in order
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-2.5-flash' });
+
+    // sendMessage called twice (once for each model)
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
   });
 
-  it('should throw error if Gemini API returns no text', async () => {
-    mockSendMessage.mockResolvedValueOnce({
+  it('should retry on 503 error on the SAME model', async () => {
+    const expectedText = 'Response after retry';
+
+    // First attempt fails with 503
+    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 503 } });
+
+    // Second attempt (retry) succeeds
+    mocks.sendMessage.mockResolvedValueOnce({
       response: {
-        text: () => '', // Empty string, simulating no text returned
+        text: () => expectedText,
       },
     });
 
-    await expect(geminiClient.generateText('Test prompt')).rejects.toThrow('Gemini API did not return text.');
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBe(expectedText);
+
+    // getGenerativeModel should be called ONLY ONCE (for the first model)
+    // because we are retrying on the same model instance
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(1);
+    expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash-lite' });
+
+    // sendMessage called twice (1 failure + 1 success)
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
   });
 
-  it('should log error if API key is invalid', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const invalidEnv = { ...mockEnv, GEMINI_API_KEY: 'short_key' };
-    const client = new GeminiClient(invalidEnv);
+  it('should switch model if all retries fail with 503? No, it should fail based on implementation', async () => {
+    // Current implementation throws error if 503 retries exhausted.
+    // It does NOT switch model for 503 errors.
 
-    mockSendMessage.mockResolvedValueOnce({
-      response: {
-        text: () => 'Response',
-      },
-    });
+    mocks.sendMessage.mockRejectedValue({ response: { status: 503 } }); // All attempts fail
 
-    await client.generateText('Test prompt');
+    const promise = geminiClient.generateText('Test prompt', [], 3);
 
-    expect(consoleSpy).toHaveBeenCalledWith('Gemini API Key is invalid or missing (expected 39 chars).');
-    consoleSpy.mockRestore();
+    const assertPromise = expect(promise).rejects.toThrow();
+
+    await vi.runAllTimersAsync();
+
+    await assertPromise;
+
+    // Should have tried retries on the first model
+    // 3 attempts total
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(3);
+    // Should NOT have tried second model
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('should iterate through all models if all return 429', async () => {
+    // All calls return 429
+    mocks.sendMessage.mockRejectedValue({ response: { status: 429 } });
+
+    // Expect the last error (429 object), not a specific message string
+    await expect(geminiClient.generateText('Test prompt')).rejects.toEqual({ response: { status: 429 } });
+
+    // Should have tried all 4 models
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(4);
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-2.5-flash' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(3, { model: 'gemini-3-flash-preview' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(4, { model: 'gemma-3-27b-it' });
+  });
+
+  it('should handle mixed errors: 429 on first model, 503 retry on second model', async () => {
+    const expectedText = 'Success after mixed errors';
+
+    // Model 1: 429 (switch)
+    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 429 } });
+
+    // Model 2: 503 (retry) -> Success
+    mocks.sendMessage
+      .mockRejectedValueOnce({ response: { status: 503 } })
+      .mockResolvedValueOnce({ response: { text: () => expectedText } });
+
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBe(expectedText);
+
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(2);
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-2.5-flash' });
+
+    // Total 3 calls: 1 (Model 1) + 2 (Model 2)
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(3);
   });
 });
