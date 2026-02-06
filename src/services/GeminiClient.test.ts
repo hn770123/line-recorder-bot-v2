@@ -4,21 +4,24 @@
  *              @google/generative-aiライブラリをモックして、テキスト生成とリトライロジックを検証します。
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GeminiClient } from '../services/gemini';
 import { Env } from '../db/BaseRepository';
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 
 // @google/generative-aiライブラリ全体をモック
 vi.mock('@google/generative-ai', () => {
+  const mockSendMessage = vi.fn();
   const mockGenerativeModel = {
     startChat: vi.fn(() => ({
-      sendMessage: vi.fn(),
+      sendMessage: mockSendMessage,
     })),
   };
-  const mockGoogleGenerativeAI = vi.fn(() => ({
-    getGenerativeModel: vi.fn(() => mockGenerativeModel),
-  }));
+  const mockGoogleGenerativeAI = vi.fn(function () {
+    return {
+      getGenerativeModel: vi.fn(() => mockGenerativeModel),
+    };
+  });
   return { GoogleGenerativeAI: mockGoogleGenerativeAI, GenerativeModel: mockGenerativeModel };
 });
 
@@ -28,18 +31,23 @@ describe('GeminiClient', () => {
   let mockSendMessage: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     mockEnv = {
       DB: {} as D1Database,
       LINE_CHANNEL_ACCESS_TOKEN: 'mock_token',
       LINE_CHANNEL_SECRET: 'mock_secret',
-      GEMINI_API_KEY: 'mock_gemini_key',
+      GEMINI_API_KEY: '123456789012345678901234567890123456789', // 39 chars
     };
     geminiClient = new GeminiClient(mockEnv);
 
     // モックされたsendMessage関数への参照を取得
     mockSendMessage = (GoogleGenerativeAI as unknown as ReturnType<typeof vi.fn>)()
       .getGenerativeModel().startChat().sendMessage;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('should generate text successfully', async () => {
@@ -65,7 +73,10 @@ describe('GeminiClient', () => {
         },
       }); // Second attempt succeeds
 
-    const result = await geminiClient.generateText('Test prompt');
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
     expect(result).toBe(expectedText);
     expect(mockSendMessage).toHaveBeenCalledTimes(2);
     expect(mockSendMessage).toHaveBeenCalledWith('Test prompt');
@@ -81,7 +92,10 @@ describe('GeminiClient', () => {
         },
       }); // Second attempt succeeds
 
-    const result = await geminiClient.generateText('Test prompt');
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
     expect(result).toBe(expectedText);
     expect(mockSendMessage).toHaveBeenCalledTimes(2);
   });
@@ -96,7 +110,10 @@ describe('GeminiClient', () => {
         },
       }); // Second attempt succeeds
 
-    const result = await geminiClient.generateText('Test prompt');
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
     expect(result).toBe(expectedText);
     expect(mockSendMessage).toHaveBeenCalledTimes(2);
   });
@@ -104,9 +121,15 @@ describe('GeminiClient', () => {
   it('should throw error after max retries', async () => {
     mockSendMessage.mockRejectedValue({ response: { status: 429 } }); // All attempts fail with 429
 
-    await expect(geminiClient.generateText('Test prompt', [], 3)).rejects.toThrow(
+    const promise = geminiClient.generateText('Test prompt', [], 3);
+    // Promiseがrejectされることを期待するアサーションを先に作成し、unhandled rejectionを防ぐ
+    const assertion = expect(promise).rejects.toThrow(
       'Failed to generate text from Gemini API after 3 attempts.'
     );
+
+    await vi.runAllTimersAsync();
+    await assertion;
+
     expect(mockSendMessage).toHaveBeenCalledTimes(3); // 最初の試行 + 2回のリトライ
   });
 
@@ -142,5 +165,22 @@ describe('GeminiClient', () => {
     });
 
     await expect(geminiClient.generateText('Test prompt')).rejects.toThrow('Gemini API did not return text.');
+  });
+
+  it('should log error if API key is invalid', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const invalidEnv = { ...mockEnv, GEMINI_API_KEY: 'short_key' };
+    const client = new GeminiClient(invalidEnv);
+
+    mockSendMessage.mockResolvedValueOnce({
+      response: {
+        text: () => 'Response',
+      },
+    });
+
+    await client.generateText('Test prompt');
+
+    expect(consoleSpy).toHaveBeenCalledWith('Gemini API Key is invalid or missing (expected 39 chars).');
+    consoleSpy.mockRestore();
   });
 });

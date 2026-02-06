@@ -110,7 +110,7 @@ describe('PostRepository', () => {
 
     const posts = await postRepository.findLatestPostsByRoomId('R1', 2);
     expect(posts).toEqual(mockPosts);
-    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM posts WHERE room_id = ? ORDER BY timestamp DESC LIMIT ?'));
+    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringMatching(/SELECT \* FROM posts.*WHERE room_id = \?.*ORDER BY timestamp DESC.*LIMIT \?/s));
     expect(mockD1.bind).toHaveBeenCalledWith('R1', 2);
   });
 
@@ -125,7 +125,7 @@ describe('PostRepository', () => {
 
     const result = await postRepository.updateTranslatedText('P123', 'Translated text');
     expect(result.success).toBe(true);
-    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE posts SET translated_text = ? WHERE post_id = ?'));
+    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringMatching(/UPDATE posts.*SET translated_text = \?.*WHERE post_id = \?/s));
     expect(mockD1.bind).toHaveBeenCalledWith('Translated text', 'P123');
   });
 
@@ -140,7 +140,7 @@ describe('PostRepository', () => {
 
     const result = await postRepository.updateHasPoll('P123', 1);
     expect(result.success).toBe(true);
-    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE posts SET has_poll = ? WHERE post_id = ?'));
+    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringMatching(/UPDATE posts.*SET has_poll = \?.*WHERE post_id = \?/s));
     expect(mockD1.bind).toHaveBeenCalledWith(1, 'P123');
   });
 });

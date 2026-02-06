@@ -32,6 +32,10 @@ export class GeminiClient {
    * @throws {Error} リトライ回数を超えてもテキスト生成に失敗した場合
    */
   async generateText(prompt: string, history: { role: string; parts: string }[] = [], retries = 3): Promise<string> {
+    if (!this.apiKey || this.apiKey.length !== 39) {
+      console.error('Gemini API Key is invalid or missing (expected 39 chars).');
+    }
+
     for (let i = 0; i < retries; i++) {
       try {
         const chat = this.model.startChat({
