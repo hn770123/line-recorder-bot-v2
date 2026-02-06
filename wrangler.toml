@@ -2,7 +2,6 @@ name = "line-recorder-bot-v2"
 main = "src/index.tsx"
 compatibility_date = "2026-02-03"
 compatibility_flags = ["nodejs_compat"]
-keep_vars = true
 
 [[d1_databases]]
 binding = "DB"
@@ -13,5 +12,5 @@ migrations_dir = "./migrations"
 [vars]
 LINE_CHANNEL_ACCESS_TOKEN = ""
 LINE_CHANNEL_SECRET = ""
-# GEMINI_API_KEY = ""
+GEMINI_API_KEY = ""
 BYPASS_LINE_VALIDATION = "true"
