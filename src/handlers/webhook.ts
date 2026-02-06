@@ -73,9 +73,18 @@ export class LineWebhookHandler {
     };
 
     const webhookRequestBody = JSON.parse(body);
-    for (const event of webhookRequestBody.events) {
-      await this.processEvent(event, services);
-    }
+
+    const processingPromise = (async () => {
+      for (const event of webhookRequestBody.events) {
+        try {
+          await this.processEvent(event, services);
+        } catch (e) {
+          console.error('Error processing event:', e);
+        }
+      }
+    })();
+
+    c.executionCtx.waitUntil(processingPromise);
 
     return c.json({ message: 'ok' }, 200);
   }
@@ -164,6 +173,12 @@ export class LineWebhookHandler {
       });
 
       console.log(`Text message from ${userId} in ${sourceId || 'private chat'}: ${message.text}`);
+
+      try {
+        await lineClient.startLoadingAnimation(userId, 60);
+      } catch (e) {
+        console.warn('Failed to start loading animation:', e);
+      }
 
       // 翻訳サービスを呼び出す
       const translatedText = await translationService.translateMessage(
