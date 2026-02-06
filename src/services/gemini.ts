@@ -20,6 +20,16 @@ export class GeminiClient {
 
   constructor(env: Env) {
     this.apiKey = env.GEMINI_API_KEY;
+    console.log('Gemini API Key (first 5 chars):', this.apiKey ? this.apiKey.substring(0, 5) + '...' : 'Not Set');
+    console.log('Gemini API Key Length:', this.apiKey ? this.apiKey.length : 'N/A');
+
+    if (!this.apiKey || this.apiKey.length === 0) {
+      console.error('Gemini API Key is missing or empty.');
+      throw new Error('GEMINI_API_KEY is not provided. Please set it in your environment.');
+    }
+    if (this.apiKey.length !== 39) {
+      console.warn('Gemini API Key might be invalid: expected 39 characters but got', this.apiKey.length);
+    }
     this.genAI = new GoogleGenerativeAI(this.apiKey);
   }
 
