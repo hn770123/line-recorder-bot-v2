@@ -7,18 +7,20 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { Env } from '../db/BaseRepository';
 
+const GEMINI_MODELS = [
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-3-flash-preview',
+  'gemma-3-27b-it'
+];
+
 export class GeminiClient {
   private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
   private apiKey: string;
 
   constructor(env: Env) {
     this.apiKey = env.GEMINI_API_KEY;
     this.genAI = new GoogleGenerativeAI(this.apiKey);
-    // TODO: モデルの選択はユースケースに応じて調整
-    // 例えば、text-onlyの場合は'gemini-pro'、visionを含む場合は'gemini-pro-vision'
-    // 現状は'gemini-pro'を使用
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
   }
 
   /**
@@ -36,30 +38,61 @@ export class GeminiClient {
       console.error('Gemini API Key is invalid or missing (expected 39 chars).');
     }
 
-    for (let i = 0; i < retries; i++) {
-      try {
-        const chat = this.model.startChat({
-          history: history,
-        });
+    let lastError: any;
 
-        const result = await chat.sendMessage(prompt);
-        const response = await result.response;
-        const text = response.text();
-        if (!text) {
-          throw new Error('Gemini API did not return text.');
-        }
-        return text;
-      } catch (error: any) {
-        console.error(`Gemini API text generation failed (Attempt ${i + 1}/${retries}):`, error);
-        // 429 Too Many Requests, 500 Internal Server Error, 503 Service Unavailable
-        if (error.response?.status === 429 || error.response?.status === 500 || error.response?.status === 503) {
-          const delay = Math.pow(2, i) * 1000; // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, delay));
-        } else {
-          throw error; // Other errors are not retried
+    for (const modelName of GEMINI_MODELS) {
+      const model = this.genAI.getGenerativeModel({ model: modelName });
+
+      for (let i = 0; i < retries; i++) {
+        try {
+          const chat = model.startChat({
+            history: history,
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const response = await result.response;
+          const text = response.text();
+          if (!text) {
+            throw new Error('Gemini API did not return text.');
+          }
+          return text;
+        } catch (error: any) {
+          console.error(`Gemini API text generation failed (Model: ${modelName}, Attempt ${i + 1}/${retries}):`, error);
+          lastError = error;
+
+          const status = error.response?.status;
+
+          // 429 Too Many Requests: Switch to next model immediately
+          if (status === 429) {
+             console.warn(`Model ${modelName} hit rate limit (429). Switching to next model.`);
+             break; // Break inner loop to continue to next model in outer loop
+          }
+
+          // 500 Internal Server Error, 503 Service Unavailable: Retry on same model
+          if (status === 500 || status === 503) {
+             if (i < retries - 1) {
+                const delay = Math.pow(2, i) * 1000; // Exponential backoff
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue; // Retry inner loop
+             }
+             // Retries exhausted, loop will finish naturally
+          } else {
+            // Other errors (not 429, not 500, not 503): Fail immediately
+            throw error;
+          }
         }
       }
+
+      // If we are here, inner loop finished.
+      // If it was due to 429 break, lastError.response.status is 429.
+      if (lastError?.response?.status === 429) {
+        continue; // Try next model
+      }
+
+      // If we are here, it means retries exhausted for 500/503 (or somehow else), we throw.
+      throw lastError;
     }
-    throw new Error(`Failed to generate text from Gemini API after ${retries} attempts.`);
+
+    throw lastError || new Error(`Failed to generate text from Gemini API after trying all models.`);
   }
 }
