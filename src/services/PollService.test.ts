@@ -38,9 +38,15 @@ describe('PollService', () => {
     mockPostRepository = new PostRepository(mockEnv) as vi.Mocked<PostRepository>;
     mockAnswerRepository = new AnswerRepository(mockEnv) as vi.Mocked<AnswerRepository>;
 
-    vi.mocked(LineClient).mockImplementation(() => mockLineClient);
-    vi.mocked(PostRepository).mockImplementation(() => mockPostRepository);
-    vi.mocked(AnswerRepository).mockImplementation(() => mockAnswerRepository);
+    vi.mocked(LineClient).mockImplementation(function () {
+      return mockLineClient;
+    });
+    vi.mocked(PostRepository).mockImplementation(function () {
+      return mockPostRepository;
+    });
+    vi.mocked(AnswerRepository).mockImplementation(function () {
+      return mockAnswerRepository;
+    });
 
     pollService = new PollService(mockEnv);
 

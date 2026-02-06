@@ -97,7 +97,7 @@ describe('LogRepository', () => {
 
     const logs = await logRepository.getRecentTranslationLogs(2);
     expect(logs).toEqual(mockLogs);
-    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM translation_logs ORDER BY timestamp DESC LIMIT ?'));
+    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringMatching(/SELECT \* FROM translation_logs.*ORDER BY timestamp DESC.*LIMIT \?/s));
     expect(mockD1.bind).toHaveBeenCalledWith(2);
   });
 
@@ -116,7 +116,7 @@ describe('LogRepository', () => {
 
     const logs = await logRepository.getRecentDebugLogs(2);
     expect(logs).toEqual(mockLogs);
-    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM debug_logs ORDER BY timestamp DESC LIMIT ?'));
+    expect(mockD1.prepare).toHaveBeenCalledWith(expect.stringMatching(/SELECT \* FROM debug_logs.*ORDER BY timestamp DESC.*LIMIT \?/s));
     expect(mockD1.bind).toHaveBeenCalledWith(2);
   });
 });
