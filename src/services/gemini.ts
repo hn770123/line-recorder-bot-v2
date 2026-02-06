@@ -8,10 +8,9 @@ import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { Env } from '../db/BaseRepository';
 
 const GEMINI_MODELS = [
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
-  'gemini-3-flash-preview',
-  'gemma-3-27b-it'
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-1.0-pro'
 ];
 
 export class GeminiClient {

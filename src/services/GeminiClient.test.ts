@@ -64,7 +64,7 @@ describe('GeminiClient', () => {
     const result = await geminiClient.generateText('Test prompt');
 
     expect(result).toBe(expectedText);
-    expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash-lite' });
+    expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-1.5-flash' });
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -86,8 +86,8 @@ describe('GeminiClient', () => {
     expect(result).toBe(expectedText);
 
     // Check that models were called in order
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-2.5-flash' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-1.5-flash' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-1.5-pro' });
 
     // sendMessage called twice (once for each model)
     expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
@@ -115,7 +115,7 @@ describe('GeminiClient', () => {
     // getGenerativeModel should be called ONLY ONCE (for the first model)
     // because we are retrying on the same model instance
     expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(1);
-    expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash-lite' });
+    expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-1.5-flash' });
 
     // sendMessage called twice (1 failure + 1 success)
     expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
@@ -149,12 +149,11 @@ describe('GeminiClient', () => {
     // Expect the last error (429 object), not a specific message string
     await expect(geminiClient.generateText('Test prompt')).rejects.toEqual({ response: { status: 429 } });
 
-    // Should have tried all 4 models
-    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(4);
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-2.5-flash' });
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(3, { model: 'gemini-3-flash-preview' });
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(4, { model: 'gemma-3-27b-it' });
+    // Should have tried all 3 models
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(3);
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-1.5-flash' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-1.5-pro' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(3, { model: 'gemini-1.0-pro' });
   });
 
   it('should handle mixed errors: 429 on first model, 503 retry on second model', async () => {
@@ -175,8 +174,8 @@ describe('GeminiClient', () => {
     expect(result).toBe(expectedText);
 
     expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(2);
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });
-    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-2.5-flash' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-1.5-flash' });
+    expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(2, { model: 'gemini-1.5-pro' });
 
     // Total 3 calls: 1 (Model 1) + 2 (Model 2)
     expect(mocks.sendMessage).toHaveBeenCalledTimes(3);
