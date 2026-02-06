@@ -51,7 +51,7 @@ export class PollResultHandler {
       `, 404);
     }
 
-    const answers = await answerRepository.getAnswersByPollPostId(postId);
+    const answers = await answerRepository.getAnswersWithUserNames(postId);
 
     // 回答の集計
     const tallies = answers.reduce((acc, answer) => {
@@ -84,6 +84,18 @@ export class PollResultHandler {
                   <span class="text-lg font-bold">${count}票 (${totalVotes > 0 ? ((count / totalVotes) * 100).toFixed(1) : 0}%)</span>
                 </div>
               `)}
+            </div>
+
+            <div class="mb-4 mt-8">
+              <h2 class="text-2xl font-semibold mb-2">回答詳細</h2>
+              <div class="bg-gray-50 rounded border p-4">
+                ${answers.map((answer) => html`
+                  <div class="flex justify-between items-center py-2 border-b last:border-b-0 border-gray-200">
+                    <span class="text-base">${answer.display_name || "-"}</span>
+                    <span class="text-base font-bold">${answer.answer_value}</span>
+                  </div>
+                `)}
+              </div>
             </div>
 
             <p class="text-gray-600 text-sm mt-8">
