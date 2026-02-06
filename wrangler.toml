@@ -2,6 +2,7 @@ name = "line-recorder-bot-v2"
 main = "src/index.tsx"
 compatibility_date = "2026-02-03"
 compatibility_flags = ["nodejs_compat"]
+keep_vars = true
 
 [[d1_databases]]
 binding = "DB"
