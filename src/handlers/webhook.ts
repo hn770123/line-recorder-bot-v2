@@ -1,7 +1,8 @@
 /**
  * @file LineWebhookHandler
  * @description LINE Messaging APIからのWebhookイベントを処理するハンドラ。
- *              署名検証、イベント解析、適切なサービスへのイベントディスパッチを行います。
+ *              署名検証を行い、Loadingアニメーションを表示した後、
+ *              イベントをCloudflare Queueに送信して非同期処理を行います。
  */
 
 import { Context } from 'hono';
@@ -17,7 +18,6 @@ import {
   WebhookEvent,
   MessageEvent,
   TextMessage,
-  PostbackEvent,
   GroupSource,
   RoomSource,
 } from '../types/line';
@@ -40,6 +40,7 @@ export class LineWebhookHandler {
   /**
    * @method handleWebhook
    * @description LINE Webhookからのリクエストを処理するメインメソッド。
+   *              署名を検証し、Loadingアニメーションを表示してイベントをキューに入れます。
    * @param {Context<Env>} c Honoコンテキストオブジェクト
    * @returns {Promise<Response>} Honoレスポンスオブジェクト
    */
@@ -63,38 +64,61 @@ export class LineWebhookHandler {
       console.warn('LINE signature validation bypassed as BYPASS_LINE_VALIDATION is true.');
     }
 
-    const services: ServiceCollection = {
-      lineClient,
-      userRepository: new UserRepository(c.env),
-      roomRepository: new RoomRepository(c.env),
-      postRepository: new PostRepository(c.env),
-      logRepository: new LogRepository(c.env),
-      translationService: new TranslationService(c.env),
-    };
-
     const webhookRequestBody = JSON.parse(body);
 
-    const processingPromise = (async () => {
-      for (const event of webhookRequestBody.events) {
+    // イベントごとに同期的にLoadingアニメーションを表示し、キューに送信
+    for (const event of webhookRequestBody.events) {
+      // メッセージイベントかつuserIdが存在する場合、Loadingアニメーションを表示
+      if (event.type === 'message' && event.source && event.source.userId) {
         try {
-          await this.processEvent(event, services);
+          await lineClient.startLoadingAnimation(event.source.userId, 60);
         } catch (e) {
-          console.error('Error processing event:', e);
+          console.warn('Failed to start loading animation:', e);
         }
       }
-    })();
 
-    // c.executionCtx.waitUntil を使用して、レスポンスを返した後もバックグラウンドで処理を継続します。
-    // これにより、LINEサーバーからのタイムアウトを防ぎつつ、Gemini API呼び出しなどの重い処理を実行できます。
-    if (c.executionCtx) {
-      c.executionCtx.waitUntil(processingPromise);
-    } else {
-      // executionCtxがない場合（テスト環境など）は、promiseの完了を待たずに処理が進む可能性がありますが、
-      // ログを出力して認識できるようにします。
-      console.warn('c.executionCtx is not available. Background processing might be terminated early.');
+      // イベントをキューに送信
+      try {
+        await c.env.LINE_BOT_QUEUE.send(event);
+      } catch (e) {
+        console.error('Failed to send event to queue:', e);
+        // キューへの送信に失敗した場合でも、LINEには200を返してリトライさせるか、
+        // ここでエラーを返してLINEに再送させるか。
+        // ここではエラーをログに出力し、処理を続行（他のイベントがあれば）しますが、
+        // クリティカルなエラーとして扱う場合はthrowしてください。
+        // 現状はログ出力にとどめます。
+      }
     }
 
     return c.json({ message: 'ok' }, 200);
+  }
+
+  /**
+   * @method handleQueue
+   * @description Cloudflare Queueからのメッセージバッチを処理します。
+   * @param {MessageBatch<WebhookEvent>} batch メッセージバッチ
+   * @param {Env} env 環境変数
+   */
+  async handleQueue(batch: MessageBatch<WebhookEvent>, env: Env): Promise<void> {
+    const services: ServiceCollection = {
+      lineClient: new LineClient(env),
+      userRepository: new UserRepository(env),
+      roomRepository: new RoomRepository(env),
+      postRepository: new PostRepository(env),
+      logRepository: new LogRepository(env),
+      translationService: new TranslationService(env),
+    };
+
+    for (const message of batch.messages) {
+      const event = message.body;
+      try {
+        await this.processEvent(event, services);
+        message.ack(); // 処理成功時に明示的にack（必須ではないが推奨）
+      } catch (e) {
+        console.error('Error processing queued event:', e);
+        message.retry(); // エラー時はリトライ
+      }
+    }
   }
 
   /**
@@ -159,7 +183,6 @@ export class LineWebhookHandler {
     }
 
     // ユーザーとルーム/グループ情報をupsert
-    // LINEプロフィール取得処理を削除し、登録済みの場合は名前を変更しないように変更
     await userRepository.createIfNotExists({ user_id: userId, display_name: "" });
 
     if (sourceId) {
@@ -182,11 +205,7 @@ export class LineWebhookHandler {
 
       console.log(`Text message from ${userId} in ${sourceId || 'private chat'}: ${message.text}`);
 
-      try {
-        await lineClient.startLoadingAnimation(userId, 60);
-      } catch (e) {
-        console.warn('Failed to start loading animation:', e);
-      }
+      // LoadingアニメーションはProducer側で実行済みのため、ここでは削除
 
       // 翻訳サービスを呼び出す
       const translatedText = await translationService.translateMessage(

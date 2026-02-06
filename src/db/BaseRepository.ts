@@ -20,6 +20,7 @@ export interface Env {
   LINE_CHANNEL_SECRET: string;
   GEMINI_API_KEY: string;
   BYPASS_LINE_VALIDATION: string;
+  LINE_BOT_QUEUE: Queue<any>;
 }
 
 export class BaseRepository {

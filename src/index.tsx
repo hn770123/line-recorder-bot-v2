@@ -24,4 +24,9 @@ app.get('/', (c) => {
   return c.text('Hello, World!')
 })
 
-export default app
+export default {
+  fetch: app.fetch,
+  async queue(batch: MessageBatch<any>, env: Env): Promise<void> {
+    await webhookHandler.handleQueue(batch, env);
+  }
+}
