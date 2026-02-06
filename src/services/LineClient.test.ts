@@ -135,6 +135,28 @@ describe('LineClient', () => {
     await expect(lineClient.getGroupMemberProfile('test_group', 'non_existent_member')).rejects.toThrow('LINE API error: 404');
   });
 
+  it('should start loading animation', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+
+    const chatId = 'test_user_id';
+    const loadingSeconds = 60;
+    const response = await lineClient.startLoadingAnimation(chatId, loadingSeconds);
+
+    expect(response.ok).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith('https://api.line.me/v2/bot/chat/loading/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${mockEnv.LINE_CHANNEL_ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify({ chatId, loadingSeconds }),
+    });
+  });
+
   it('should validate a correct signature', async () => {
     const signature = 'mockExpectedSignature';
     const body = '{"events":[]}';

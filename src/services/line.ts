@@ -97,6 +97,22 @@ export class LineClient {
   }
 
   /**
+   * @method startLoadingAnimation
+   * @description ユーザーに対してローディングアニメーションを表示します。
+   * @param {string} chatId ユーザーID
+   * @param {number} loadingSeconds 表示時間（秒）デフォルト20秒、最大60秒
+   * @returns {Promise<Response>} fetch APIのレスポンス
+   */
+  async startLoadingAnimation(chatId: string, loadingSeconds: number = 20): Promise<Response> {
+    const url = `${LINE_API_BASE_URL}/chat/loading/start`;
+    const body = {
+      chatId: chatId,
+      loadingSeconds: loadingSeconds,
+    };
+    return this.post(url, body);
+  }
+
+  /**
    * @method validateSignature
    * @description LINEからのWebhookリクエストの署名を検証します。
    * @param {string} signature LINE-Signatureヘッダーの値
