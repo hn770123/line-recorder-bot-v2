@@ -84,7 +84,15 @@ export class LineWebhookHandler {
       }
     })();
 
-    c.executionCtx.waitUntil(processingPromise);
+    // c.executionCtx.waitUntil を使用して、レスポンスを返した後もバックグラウンドで処理を継続します。
+    // これにより、LINEサーバーからのタイムアウトを防ぎつつ、Gemini API呼び出しなどの重い処理を実行できます。
+    if (c.executionCtx) {
+      c.executionCtx.waitUntil(processingPromise);
+    } else {
+      // executionCtxがない場合（テスト環境など）は、promiseの完了を待たずに処理が進む可能性がありますが、
+      // ログを出力して認識できるようにします。
+      console.warn('c.executionCtx is not available. Background processing might be terminated early.');
+    }
 
     return c.json({ message: 'ok' }, 200);
   }
