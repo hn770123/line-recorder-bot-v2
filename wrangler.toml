@@ -19,4 +19,5 @@ migrations_dir = "./migrations"
  max_batch_timeout = 5
 
 [vars]
+BYPASS_LINE_VALIDATION = "true"
 BASE_URL = "https://line-recorder-bot-v2.lentrue.workers.dev"
