@@ -41,4 +41,3 @@ jobs:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          BYPASS_LINE_VALIDATION: ${{ secrets.BYPASS_LINE_VALIDATION }}
