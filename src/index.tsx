@@ -3,10 +3,14 @@ import { logger } from 'hono/logger'
 import { Env } from './db/BaseRepository';
 import { LineWebhookHandler } from './handlers/webhook';
 import { PollResultHandler } from './handlers/poll-result'; // Import PollResultHandler
+import { admin } from './handlers/admin';
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', logger())
+
+// Adminルートをマウント
+app.route('/admin', admin);
 
 // Webhookハンドラをインスタンス化
 const webhookHandler = new LineWebhookHandler();
