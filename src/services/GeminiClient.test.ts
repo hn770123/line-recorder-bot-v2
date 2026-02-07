@@ -45,6 +45,7 @@ describe('GeminiClient', () => {
       LINE_CHANNEL_ACCESS_TOKEN: 'mock_token',
       LINE_CHANNEL_SECRET: 'mock_secret',
       GEMINI_API_KEY: '123456789012345678901234567890123456789', // 39 chars
+      BASE_URL: 'https://example.com',
     };
     geminiClient = new GeminiClient(mockEnv);
   });

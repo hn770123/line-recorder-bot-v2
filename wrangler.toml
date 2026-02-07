@@ -17,3 +17,6 @@ migrations_dir = "./migrations"
  queue = "line-bot-queue"
  max_batch_size = 10
  max_batch_timeout = 5
+
+[vars]
+BASE_URL = "https://line-recorder-bot-v2.lentrue.workers.dev"
