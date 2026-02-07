@@ -36,10 +36,14 @@ vi.mock('@google/generative-ai', () => {
 describe('GeminiClient', () => {
   let geminiClient: GeminiClient;
   let mockEnv: Env;
+  let consoleWarnSpy: any;
+  let consoleErrorSpy: any;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockEnv = {
       DB: {} as D1Database,
       LINE_CHANNEL_ACCESS_TOKEN: 'mock_token',
@@ -52,6 +56,8 @@ describe('GeminiClient', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    consoleWarnSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   it('should generate text successfully with the first model', async () => {
@@ -73,7 +79,9 @@ describe('GeminiClient', () => {
     const expectedText = 'Response from second model';
 
     // First model fails with 429
-    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 429 } });
+    const error429 = new Error('Rate limit exceeded');
+    (error429 as any).response = { status: 429 };
+    mocks.sendMessage.mockRejectedValueOnce(error429);
 
     // Second model succeeds
     mocks.sendMessage.mockResolvedValueOnce({
@@ -85,6 +93,16 @@ describe('GeminiClient', () => {
     const result = await geminiClient.generateText('Test prompt');
 
     expect(result).toBe(expectedText);
+
+    // Check that detailed error log was called
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Gemini API text generation failed'),
+      expect.objectContaining({ stack: expect.any(String) }) // Check stack trace object
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Detail: Rate limit exceeded'), // Check error message
+      expect.any(Object)
+    );
 
     // Check that models were called in order
     expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });
@@ -113,12 +131,42 @@ describe('GeminiClient', () => {
 
     expect(result).toBe(expectedText);
 
+    // Check log for 503
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Gemini API Service Unavailable (503)'));
+
     // getGenerativeModel should be called ONLY ONCE (for the first model)
     // because we are retrying on the same model instance
     expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(1);
     expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash-lite' });
 
     // sendMessage called twice (1 failure + 1 success)
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('should retry on 500 error on the SAME model', async () => {
+    const expectedText = 'Response after 500 retry';
+
+    // First attempt fails with 500
+    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 500 } });
+
+    // Second attempt (retry) succeeds
+    mocks.sendMessage.mockResolvedValueOnce({
+      response: {
+        text: () => expectedText,
+      },
+    });
+
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBe(expectedText);
+
+    // Check log for 500
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Gemini API Internal Server Error (500)'));
+
+    // getGenerativeModel should be called ONLY ONCE
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(1);
     expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
   });
 
