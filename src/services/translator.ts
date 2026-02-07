@@ -54,6 +54,7 @@ export class TranslationService {
     messageText: string
   ): Promise<string | null> {
     const sourceLang = this.detectLanguage(messageText);
+    console.log(`Detected language: ${sourceLang} for text: ${messageText}`); // 追加
     let targetLangs: ('ja' | 'pl' | 'en')[] = [];
 
     if (sourceLang === 'ja') {
@@ -62,6 +63,7 @@ export class TranslationService {
       targetLangs = ['ja'];
     } else {
       // 翻訳が不要なケース
+      console.log('No target languages identified. Skipping translation.'); // 追加
       return null;
     }
 
