@@ -67,6 +67,7 @@ describe('LineWebhookHandler Poll Logic', () => {
     LINE_BOT_QUEUE: {
       send: vi.fn(),
     },
+    ADMIN_PASSWORD: 'mock_password',
   } as unknown as Env;
 
   beforeEach(() => {

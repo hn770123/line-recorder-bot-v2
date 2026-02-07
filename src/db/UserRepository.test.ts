@@ -24,6 +24,7 @@ describe('UserRepository', () => {
       LINE_CHANNEL_SECRET: 'mock_secret',
       GEMINI_API_KEY: 'mock_gemini_key',
       BASE_URL: 'https://example.com',
+      ADMIN_PASSWORD: 'mock_password',
     };
     userRepository = new UserRepository(mockEnv);
   });

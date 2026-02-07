@@ -23,6 +23,7 @@ describe('AnswerRepository', () => {
       LINE_CHANNEL_SECRET: 'mock_secret',
       GEMINI_API_KEY: 'mock_gemini_key',
       BASE_URL: 'https://example.com',
+      ADMIN_PASSWORD: 'mock_password',
     };
     answerRepository = new AnswerRepository(mockEnv);
   });
