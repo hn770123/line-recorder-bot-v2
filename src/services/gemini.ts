@@ -51,8 +51,11 @@ export class GeminiClient {
     let lastError: any;
 
     for (const modelName of GEMINI_MODELS) {
+      console.log('Attempting to get model:', modelName);
       const model = this.genAI.getGenerativeModel({ model: modelName });
 
+      console.log(`Starting chat with model: ${modelName}`);
+      
       for (let i = 0; i < retries; i++) {
         try {
           const chat = model.startChat({
