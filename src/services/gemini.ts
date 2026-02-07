@@ -86,6 +86,7 @@ export class GeminiClient {
              if (i < retries - 1) {
                 // Wait 2000-5000ms
                 const delay = Math.floor(Math.random() * 3001) + 2000;
+                console.warn(`Gemini API Service Unavailable (503). Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue; // Retry inner loop
              }
@@ -95,6 +96,7 @@ export class GeminiClient {
           else if (status === 500) {
              if (i < retries - 1) {
                 const delay = Math.pow(2, i) * 1000; // Exponential backoff
+                console.warn(`Gemini API Internal Server Error (500). Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue; // Retry inner loop
              }

@@ -36,10 +36,12 @@ vi.mock('@google/generative-ai', () => {
 describe('GeminiClient', () => {
   let geminiClient: GeminiClient;
   let mockEnv: Env;
+  let consoleWarnSpy: any;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockEnv = {
       DB: {} as D1Database,
       LINE_CHANNEL_ACCESS_TOKEN: 'mock_token',
@@ -52,6 +54,7 @@ describe('GeminiClient', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    consoleWarnSpy.mockRestore();
   });
 
   it('should generate text successfully with the first model', async () => {
@@ -113,12 +116,42 @@ describe('GeminiClient', () => {
 
     expect(result).toBe(expectedText);
 
+    // Check log for 503
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Gemini API Service Unavailable (503)'));
+
     // getGenerativeModel should be called ONLY ONCE (for the first model)
     // because we are retrying on the same model instance
     expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(1);
     expect(mocks.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash-lite' });
 
     // sendMessage called twice (1 failure + 1 success)
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('should retry on 500 error on the SAME model', async () => {
+    const expectedText = 'Response after 500 retry';
+
+    // First attempt fails with 500
+    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 500 } });
+
+    // Second attempt (retry) succeeds
+    mocks.sendMessage.mockResolvedValueOnce({
+      response: {
+        text: () => expectedText,
+      },
+    });
+
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBe(expectedText);
+
+    // Check log for 500
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Gemini API Internal Server Error (500)'));
+
+    // getGenerativeModel should be called ONLY ONCE
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(1);
     expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
   });
 
