@@ -90,8 +90,8 @@ export class LineWebhookHandler {
       }
     }
 
-    // 1 秒待ってみる
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // 2 秒待ってみる
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     return c.json({ message: 'ok' }, 200);
   }
