@@ -20,9 +20,9 @@ vi.mock('../db/AnswerRepository');
 describe('PollService', () => {
   let pollService: PollService;
   let mockEnv: Env;
-  let mockLineClient: vi.Mocked<LineClient>;
-  let mockPostRepository: vi.Mocked<PostRepository>;
-  let mockAnswerRepository: vi.Mocked<AnswerRepository>;
+  let mockLineClient: any;
+  let mockPostRepository: any;
+  let mockAnswerRepository: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,12 +32,20 @@ describe('PollService', () => {
       LINE_CHANNEL_SECRET: 'mock_secret',
       GEMINI_API_KEY: 'mock_gemini_key',
       BASE_URL: 'https://example.com',
+      LINE_BOT_QUEUE: {} as Queue,
+      BYPASS_LINE_VALIDATION: "false"
     };
 
     // モックされたインスタンスを取得
-    mockLineClient = new LineClient(mockEnv) as vi.Mocked<LineClient>;
-    mockPostRepository = new PostRepository(mockEnv) as vi.Mocked<PostRepository>;
-    mockAnswerRepository = new AnswerRepository(mockEnv) as vi.Mocked<AnswerRepository>;
+    mockLineClient = {
+      replyMessage: vi.fn()
+    };
+    mockPostRepository = {
+      updateHasPoll: vi.fn()
+    };
+    mockAnswerRepository = {
+      upsert: vi.fn()
+    };
 
     vi.mocked(LineClient).mockImplementation(function () {
       return mockLineClient;
@@ -67,7 +75,7 @@ describe('PollService', () => {
     expect(question).toBe('What is your favorite color?');
   });
 
-  it('should create a poll and send Flex Message', async () => {
+  it('should create a poll and send Flex Message with correct altText', async () => {
     const replyToken = 'test_reply_token';
     const postId = 'test_post_id';
     const question = 'Test Question';
@@ -78,9 +86,10 @@ describe('PollService', () => {
 
     await pollService.createPoll(replyToken, postId, question, userId, roomId);
 
+    // GAS version uses fixed altText "アンケート"
     expect(mockLineClient.replyMessage).toHaveBeenCalledWith(
       replyToken,
-      [expect.objectContaining({ type: 'flex', altText: expect.stringContaining(question) })]
+      [expect.objectContaining({ type: 'flex', altText: 'アンケート' })]
     );
   });
 

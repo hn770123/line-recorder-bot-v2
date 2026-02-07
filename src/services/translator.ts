@@ -45,7 +45,7 @@ export class TranslationService {
    * @param {string} userId 投稿者のユーザーID
    * @param {string | null} roomId 投稿があったルームID (個人チャットの場合はnull)
    * @param {string} messageText 翻訳する元のメッセージテキスト
-   * @returns {Promise<string | null>} 翻訳されたテキスト(複数言語の場合は改行区切り)、または翻訳不要/失敗の場合はnull
+   * @returns {Promise<string | null>} 翻訳されたテキスト、または翻訳不要/失敗の場合はnull
    */
   async translateMessage(
     postId: string,
@@ -54,60 +54,44 @@ export class TranslationService {
     messageText: string
   ): Promise<string | null> {
     const sourceLang = this.detectLanguage(messageText);
-    console.log(`Detected language: ${sourceLang} for text: ${messageText}`); // 追加
-    let targetLangs: ('ja' | 'pl' | 'en')[] = [];
+    console.log(`Detected language: ${sourceLang} for text: ${messageText}`);
 
-    if (sourceLang === 'ja') {
-      targetLangs = ['en', 'pl'];
-    } else if (sourceLang === 'en' || sourceLang === 'pl') {
-      targetLangs = ['ja'];
-    } else {
-      // 翻訳が不要なケース
-      console.log('No target languages identified. Skipping translation.'); // 追加
+    // 翻訳対象の言語かチェック
+    if (sourceLang !== 'ja' && sourceLang !== 'en' && sourceLang !== 'pl') {
+      console.log('No target languages identified. Skipping translation.');
       return null;
     }
 
     const context = await this.getContext(userId, roomId);
-    const translations: string[] = [];
+    const prompt = this.createTranslationPrompt(messageText, context, sourceLang);
 
-    for (const targetLang of targetLangs) {
-      const prompt = this.createTranslationPrompt(messageText, context, sourceLang, targetLang);
-      try {
-        const translatedText = await this.geminiClient.generateText(prompt);
-        translations.push(`[${targetLang.toUpperCase()}] ${translatedText}`);
+    try {
+      const translatedText = await this.geminiClient.generateText(prompt);
 
-        // 最初の翻訳成功時にログを記録
-        if (translations.length === 1) {
-          await this.logRepository.createTranslationLog({
-            timestamp: new Date().toISOString(),
-            user_id: userId,
-            language: sourceLang,
-            original_message: messageText,
-            translation: translatedText, // 最初の翻訳結果を記録
-            prompt: prompt,
-            history_count: context.length,
-          });
-        }
-      } catch (error) {
-        console.error(`Translation from ${sourceLang} to ${targetLang} failed:`, error);
-        await this.logRepository.createDebugLog({
-          timestamp: new Date().toISOString(),
-          message: `Translation error for post ${postId} (${sourceLang} -> ${targetLang}): ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          stack: error instanceof Error ? error.stack : null,
-        });
-        // 1つでも翻訳に失敗したら、そこで処理を中断することも検討できるが、一旦続行する
-      }
+      // ログを記録
+      await this.logRepository.createTranslationLog({
+        timestamp: new Date().toISOString(),
+        user_id: userId,
+        language: sourceLang,
+        original_message: messageText,
+        translation: translatedText,
+        prompt: prompt,
+        history_count: context.length,
+      });
+
+      await this.postRepository.updateTranslatedText(postId, translatedText);
+      return translatedText;
+    } catch (error) {
+      console.error(`Translation failed:`, error);
+      await this.logRepository.createDebugLog({
+        timestamp: new Date().toISOString(),
+        message: `Translation error for post ${postId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        stack: error instanceof Error ? error.stack : null,
+      });
+      return null;
     }
-
-    if (translations.length > 0) {
-      const combinedTranslations = translations.join('\n');
-      await this.postRepository.updateTranslatedText(postId, combinedTranslations);
-      return combinedTranslations;
-    }
-
-    return null;
   }
 
   /**
@@ -129,55 +113,52 @@ export class TranslationService {
   /**
    * @method createTranslationPrompt
    * @description Gemini APIに渡す翻訳プロンプトを構築します。
+   *              GASの実装(gas-src/code.gs)と完全に一致するようにしています。
    * @param {string} messageText 翻訳対象のメッセージ
    * @param {Post[]} context 会話のコンテキスト
    * @param {'ja' | 'pl' | 'en'} sourceLang 元のメッセージの言語コード
-   * @param {'ja' | 'pl' | 'en'} targetLang 翻訳先の言語コード
    * @returns {string} 構築されたプロンプト
    */
   private createTranslationPrompt(
     messageText: string,
     context: Post[],
-    sourceLang: 'ja' | 'pl' | 'en',
-    targetLang: 'ja' | 'pl' | 'en'
+    sourceLang: 'ja' | 'pl' | 'en'
   ): string {
-    const contextString = context
-      .map(post => `> ${post.message_text || ''}`)
-      .reverse()
-      .join('\n');
+    let prompt = '';
 
-    let roleplayInstruction: string;
-    let translationInstruction: string;
-
-    // Based on specs-on-cloudflareworker.md
     if (sourceLang === 'ja') {
-      // 保護者(ja) -> 先生(en/pl)
-      roleplayInstruction = `You are a professional translator for a children's ballet school. Translate the following Japanese message from a parent into natural, polite ${
-        targetLang === 'en' ? 'English' : 'Polish'
-      }. Ballet-specific terms (e.g., ポアント, プリエ) should be translated appropriately.`;
-      translationInstruction = `Please translate the following Japanese message into ${
-        targetLang === 'en' ? 'English' : 'Polish'
-      }.`;
+      prompt += 'あなたはプロの通訳アシスタントです。以下の日本語テキストを「英語」と「ポーランド語」の両方に翻訳してください。\n\n';
+      prompt += '【出力形式】\n';
+      prompt += 'Polish: [ポーランド語の翻訳結果]\n';
+      prompt += 'English: [英語の翻訳結果]\n\n';
     } else {
-      // 先生(en/pl) -> 保護者(ja)
-      roleplayInstruction = `あなたはバレエ教室のプロの翻訳者です。以下の${
-        sourceLang === 'en' ? '英語' : 'ポーランド語'
-      }のメッセージを、生徒の日本の保護者向けに、自然で丁寧な日本語に翻訳してください。先生の親しみやすい人柄が伝わるように、少し柔らかい表現を加えてください。バレエの専門用語は適切に翻訳してください。`;
-      translationInstruction = `以下のメッセージを日本語に翻訳してください。`;
+      prompt += 'あなたはプロの通訳アシスタントです。以下のテキストを自然な日本語に翻訳してください。\n\n';
     }
 
-    return `
-# Role
-${roleplayInstruction}
+    if (context && context.length > 0) {
+      prompt += '【会話の文脈】\n';
+      prompt += '以下は過去のユーザーの発言です。代名詞や省略表現を翻訳する際の参考にしてください。\n\n';
+      // コンテキストは新しい順(DESC)で来るので、古い順に並べ替える
+      const chronologicalContext = [...context].reverse();
+      chronologicalContext.forEach((post, index) => {
+        prompt += (index + 1) + '. ' + (post.message_text || '') + '\n';
+      });
+      prompt += '\n';
+    }
 
-# Context (Recent conversation history)
-${contextString || 'None'}
+    prompt += '【翻訳対象】\n';
+    prompt += messageText + '\n\n';
+    prompt += '【指示】\n';
+    prompt += '- 翻訳結果のみを出力してください（説明や追加情報は不要）\n';
+    prompt += '- 子供バレエ教室のチャットでのメッセージです。バレエ用語は正しく訳してください。ポーランド語は先生で、日本語は生徒の保護者です。バレエ教室の先生とのやりとりとして自然な文章にしてください。\n';
+    prompt += '- 原文に含まれるニュアンス（感情、皮肉、丁寧さの度合い、ユーモアなど）を鋭敏に汲み取り、それをターゲット言語で適切に表現してください。直訳よりも、この「空気感」の再現を優先してください。\n';
+    prompt += '- ポーランド人が言葉に込める親密さを表現してください\n';
+    prompt += '- 翻訳した文章が長くなっても構いませんので、元の文章の意図が完全に伝わるようにしてください\n';
 
-# Instruction
-${translationInstruction}
----
-${messageText}
----
-`;
+    if (context && context.length > 0) {
+      prompt += '- 代名詞や省略表現は、上記の文脈を考慮して適切に翻訳してください\n';
+    }
+
+    return prompt;
   }
 }

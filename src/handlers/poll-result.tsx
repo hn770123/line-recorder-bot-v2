@@ -39,11 +39,15 @@ export class PollResultHandler {
             <title>Poll Not Found</title>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+            <style>
+              body { font-family: sans-serif; padding: 20px; color: #333; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f2f2f2; }
+              .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+              h1 { margin-bottom: 20px; }
+            </style>
           </head>
-          <body class="bg-gray-100 flex items-center justify-center h-screen">
-            <div class="text-center p-8 bg-white rounded shadow-md">
-              <h1 class="text-2xl font-bold mb-4">アンケートが見つかりません</h1>
+          <body>
+            <div class="container">
+              <h1>アンケートが見つかりません</h1>
               <p>指定されたIDのアンケートは存在しないか、アンケートとして設定されていません。</p>
             </div>
           </body>
@@ -53,54 +57,85 @@ export class PollResultHandler {
 
     const answers = await answerRepository.getAnswersWithUserNames(postId);
 
-    // 回答の集計
-    const tallies = answers.reduce((acc, answer) => {
-      const value = answer.answer_value || 'N/A'; // nullの場合は'N/A'として扱う
-      acc[value] = (acc[value] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const totalVotes = answers.length;
+    // 回答の集計は不要になった（GASではリスト表示のみだったため）。
+    // 必要なら追加するが、GASのHTMLには集計テーブルはない。
 
     return c.html(html`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Poll Results: ${post.message_text}</title>
+          <title>See results</title>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+          <style>
+            body { font-family: sans-serif; padding: 20px; color: #333; }
+            .container { max-width: 800px; margin: 0 auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            h2 { margin-bottom: 20px; text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border-bottom: 1px solid #ddd; padding: 12px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .ok { color: #06c755; font-weight: bold; }
+            .ng { color: #ef454d; font-weight: bold; }
+            .footer { margin-top: 30px; font-size: 0.8em; color: #666; text-align: center; }
+            .poll-content { background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 5px solid #06c755; }
+            .poll-content p { white-space: pre-wrap; margin-bottom: 0; }
+          </style>
         </head>
-        <body class="bg-gray-100 p-8">
-          <div class="max-w-xl mx-auto bg-white p-6 rounded shadow-md">
-            <h1 class="text-3xl font-bold mb-4">アンケート結果</h1>
-            <p class="text-xl mb-6">${post.message_text}</p>
-
-            <div class="mb-4">
-              <h2 class="text-2xl font-semibold mb-2">投票合計: ${totalVotes}</h2>
-              ${Object.entries(tallies).map(([answer, count]) => html`
-                <div class="flex justify-between items-center py-2 border-b last:border-b-0">
-                  <span class="text-lg">${answer}</span>
-                  <span class="text-lg font-bold">${count}票 (${totalVotes > 0 ? ((count / totalVotes) * 100).toFixed(1) : 0}%)</span>
-                </div>
-              `)}
-            </div>
-
-            <div class="mb-4 mt-8">
-              <h2 class="text-2xl font-semibold mb-2">回答詳細</h2>
-              <div class="bg-gray-50 rounded border p-4">
-                ${answers.map((answer) => html`
-                  <div class="flex justify-between items-center py-2 border-b last:border-b-0 border-gray-200">
-                    <span class="text-base">${answer.display_name || "-"}</span>
-                    <span class="text-base font-bold">${answer.answer_value}</span>
-                  </div>
-                `)}
+        <body>
+          <div class="container">
+            <h2>See results</h2>
+            ${post.message_text ? html`
+              <div class="poll-content">
+                <p>${post.message_text}</p>
+                ${post.translated_text ? html`
+                  <hr style="border: 0; border-top: 1px solid #ddd; margin: 10px 0;">
+                  <p style="color: #666; font-size: 0.9em;">${post.translated_text}</p>
+                ` : ''}
               </div>
-            </div>
+            ` : ''}
 
-            <p class="text-gray-600 text-sm mt-8">
-              ※ このページはCloudflare Workerで生成されています。
-            </p>
+            ${answers.length > 0 ? html`
+              <table>
+                <thead>
+                  <tr>
+                    <th>日時</th>
+                    <th>名前</th>
+                    <th>回答</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${answers.map((answer) => {
+                    const date = new Date(answer.timestamp).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+                    // display_nameが型の定義上存在しない場合はanyキャスト等が必要だが、
+                    // getAnswersWithUserNamesの実装依存。ここではanyキャストして回避するか、
+                    // 以前のコードが通っていたので、Answer型にdisplay_nameが含まれているか、
+                    // もしくはgetAnswersWithUserNamesの戻り値が拡張された型であると想定。
+                    // エラー回避のため (answer as any).display_name を使用するか、
+                    // 以前のコードを見る限り answer.display_name でアクセスしていたのでそのままにする。
+                    // もし型エラーが出るようなら修正が必要。
+                    const displayName = (answer as any).display_name || "-";
+                    const answerClass = (answer.answer_value || '').toLowerCase();
+                    return html`
+                      <tr>
+                        <td>${date}</td>
+                        <td>${displayName}</td>
+                        <td class="${answerClass}">${answer.answer_value}</td>
+                      </tr>
+                    `;
+                  })}
+                </tbody>
+              </table>
+            ` : html`
+              <p style="text-align: center;">まだ回答はありません。</p>
+            `}
+
+            <div class="footer">
+              <p>対象投稿ID: ${postId}</p>
+              <p style="margin-top: 20px; font-size: 0.9em; line-height: 1.6;">
+                <strong>[Check]</strong> でアンケートを作成<br>
+                <strong>私の名前は"〇〇"</strong> で名前を設定
+              </p>
+            </div>
           </div>
         </body>
       </html>
