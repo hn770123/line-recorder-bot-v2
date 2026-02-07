@@ -37,11 +37,13 @@ describe('GeminiClient', () => {
   let geminiClient: GeminiClient;
   let mockEnv: Env;
   let consoleWarnSpy: any;
+  let consoleErrorSpy: any;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockEnv = {
       DB: {} as D1Database,
       LINE_CHANNEL_ACCESS_TOKEN: 'mock_token',
@@ -55,6 +57,7 @@ describe('GeminiClient', () => {
   afterEach(() => {
     vi.useRealTimers();
     consoleWarnSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   it('should generate text successfully with the first model', async () => {
@@ -76,7 +79,9 @@ describe('GeminiClient', () => {
     const expectedText = 'Response from second model';
 
     // First model fails with 429
-    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 429 } });
+    const error429 = new Error('Rate limit exceeded');
+    (error429 as any).response = { status: 429 };
+    mocks.sendMessage.mockRejectedValueOnce(error429);
 
     // Second model succeeds
     mocks.sendMessage.mockResolvedValueOnce({
@@ -88,6 +93,16 @@ describe('GeminiClient', () => {
     const result = await geminiClient.generateText('Test prompt');
 
     expect(result).toBe(expectedText);
+
+    // Check that detailed error log was called
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Gemini API text generation failed'),
+      expect.objectContaining({ stack: expect.any(String) }) // Check stack trace object
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Detail: Rate limit exceeded'), // Check error message
+      expect.any(Object)
+    );
 
     // Check that models were called in order
     expect(mocks.getGenerativeModel).toHaveBeenNthCalledWith(1, { model: 'gemini-2.5-flash-lite' });

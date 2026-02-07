@@ -70,7 +70,10 @@ export class GeminiClient {
           }
           return text;
         } catch (error: any) {
-          console.error(`Gemini API text generation failed (Model: ${modelName}, Attempt ${i + 1}/${retries}):`, error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorStack = error instanceof Error ? error.stack : '';
+          console.error(`Gemini API text generation failed (Model: ${modelName}, Attempt ${i + 1}/${retries}). Detail: ${errorMessage}`, { stack: errorStack });
+
           lastError = error;
 
           const status = error.response?.status;
