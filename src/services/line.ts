@@ -109,6 +109,8 @@ export class LineClient {
       chatId: chatId,
       loadingSeconds: loadingSeconds,
     };
+    console.log('post url:', url)
+    console.log('post body:', body)
     return this.post(url, body);
   }
 
