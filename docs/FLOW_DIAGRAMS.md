@@ -97,29 +97,29 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start([開始]) --> Detect[言語検出]
+    Start([開始]) --> Detect["言語検出"]
 
-    Detect -- 日本語 (JA) --> TargetJA[ターゲット: EN, PL]
-    Detect -- 英語/ポーランド語 (EN/PL) --> TargetENPL[ターゲット: JA]
+    Detect -- 日本語 (JA) --> TargetJA["ターゲット: EN, PL"]
+    Detect -- 英語/ポーランド語 (EN/PL) --> TargetENPL["ターゲット: JA"]
     Detect -- その他 --> End([終了: null])
 
-    TargetJA --> GetContext[コンテキスト取得 (直近2件)]
+    TargetJA --> GetContext["コンテキスト取得 (直近2件)"]
     TargetENPL --> GetContext
 
     GetContext --> LoopStart{ターゲット言語ループ}
 
-    LoopStart -- 次の言語 --> CreatePrompt[プロンプト作成 (Roleplay)]
-    CreatePrompt --> CallGemini[Gemini API呼び出し]
+    LoopStart -- 次の言語 --> CreatePrompt["プロンプト作成 (Roleplay)"]
+    CreatePrompt --> CallGemini["Gemini API呼び出し"]
 
-    CallGemini -- 成功 --> SaveLog[ログ保存]
-    SaveLog --> AddList[翻訳リストに追加]
+    CallGemini -- 成功 --> SaveLog["ログ保存"]
+    SaveLog --> AddList["翻訳リストに追加"]
 
-    CallGemini -- 失敗 --> LogError[エラーログ出力]
+    CallGemini -- 失敗 --> LogError["エラーログ出力"]
     LogError --> LoopStart
 
     LoopStart -- 全言語終了 --> CheckResult{翻訳結果あり?}
 
-    CheckResult -- Yes --> UpdateDB[DB更新 (updateTranslatedText)]
+    CheckResult -- Yes --> UpdateDB["DB更新 (updateTranslatedText)"]
     UpdateDB --> ReturnResult([翻訳テキストを返す])
 
     CheckResult -- No --> End
