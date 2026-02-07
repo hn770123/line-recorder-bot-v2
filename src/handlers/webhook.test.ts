@@ -33,6 +33,7 @@ vi.mock('../db', () => ({
       create: vi.fn(),
     };
   }),
+  AnswerRepository: vi.fn().mockImplementation(function() { return { upsert: vi.fn() }; }),
   LogRepository: vi.fn().mockImplementation(function() { return {}; }),
   AnswerRepository: vi.fn().mockImplementation(function() { return {}; }),
 }));
@@ -69,6 +70,7 @@ describe('LineWebhookHandler', () => {
         LINE_CHANNEL_ACCESS_TOKEN: 'token',
         LINE_CHANNEL_SECRET: 'secret',
         LINE_BOT_QUEUE: mockQueue,
+        ADMIN_PASSWORD: 'mock_password',
       },
       executionCtx: {
         waitUntil: vi.fn(),

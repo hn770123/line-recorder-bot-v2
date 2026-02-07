@@ -33,7 +33,8 @@ describe('PollService', () => {
       GEMINI_API_KEY: 'mock_gemini_key',
       BASE_URL: 'https://example.com',
       LINE_BOT_QUEUE: {} as Queue,
-      BYPASS_LINE_VALIDATION: "false"
+      BYPASS_LINE_VALIDATION: "false",
+      ADMIN_PASSWORD: 'mock_password',
     };
 
     // モックされたインスタンスを取得

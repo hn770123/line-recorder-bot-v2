@@ -22,6 +22,7 @@ export interface Env {
   BYPASS_LINE_VALIDATION: string;
   LINE_BOT_QUEUE: Queue<any>;
   BASE_URL: string;
+  ADMIN_PASSWORD: string;
 }
 
 export class BaseRepository {

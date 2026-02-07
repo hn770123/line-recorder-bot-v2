@@ -34,6 +34,7 @@ describe('LineClient', () => {
       LINE_CHANNEL_SECRET: 'test_channel_secret',
       GEMINI_API_KEY: 'mock_gemini_key',
       BASE_URL: 'https://example.com',
+      ADMIN_PASSWORD: 'mock_password',
     };
     lineClient = new LineClient(mockEnv);
   });
