@@ -13,15 +13,18 @@ import {
   RoomRepository,
   PostRepository,
   LogRepository,
+  AnswerRepository,
 } from '../db';
 import {
   WebhookEvent,
   MessageEvent,
   TextMessage,
+  PostbackEvent,
   GroupSource,
   RoomSource,
 } from '../types/line';
 import { TranslationService } from '../services/translator';
+import { createPollFlexMessage } from '../utils/flexMessages';
 
 type ServiceCollection = {
   lineClient: LineClient;
@@ -29,7 +32,9 @@ type ServiceCollection = {
   roomRepository: RoomRepository;
   postRepository: PostRepository;
   logRepository: LogRepository;
+  answerRepository: AnswerRepository;
   translationService: TranslationService;
+  env: Env;
 };
 
 export class LineWebhookHandler {
@@ -107,7 +112,9 @@ export class LineWebhookHandler {
       roomRepository: new RoomRepository(env),
       postRepository: new PostRepository(env),
       logRepository: new LogRepository(env),
+      answerRepository: new AnswerRepository(env),
       translationService: new TranslationService(env),
+      env: env,
     };
 
     for (const message of batch.messages) {
@@ -142,8 +149,7 @@ export class LineWebhookHandler {
         console.log('Join event received:', event);
         break;
       case 'postback':
-        // Postback events are for polls (Phase 5)
-        console.log('Postback event received and ignored for now:', event);
+        await this.handlePostbackEvent(event as PostbackEvent, services);
         break;
       default:
         console.log(`Unhandled event type: ${event.type}`);
@@ -192,6 +198,8 @@ export class LineWebhookHandler {
 
     if (event.message.type === 'text') {
       const message = event.message as TextMessage;
+      const checkRegex = /\[check\]/i;
+      const hasPoll = checkRegex.test(message.text);
 
       // 投稿をDBに保存
       await postRepository.create({
@@ -200,7 +208,7 @@ export class LineWebhookHandler {
         user_id: userId,
         room_id: sourceId,
         message_text: message.text,
-        has_poll: 0,
+        has_poll: hasPoll ? 1 : 0,
         translated_text: null,
       });
 
@@ -208,25 +216,102 @@ export class LineWebhookHandler {
 
       // LoadingアニメーションはProducer側で実行済みのため、ここでは削除
 
-      // 翻訳サービスを呼び出す
-      const translatedText = await translationService.translateMessage(
-        message.id,
-        userId,
-        sourceId,
-        message.text
-      );
+      if (hasPoll) {
+        const pollContent = message.text.replace(checkRegex, '').trim();
+        let translatedPoll = '';
 
-      // 翻訳結果があれば返信する
-      if (translatedText && event.replyToken) {
-        await lineClient.replyMessage(event.replyToken, [
-          {
+        // アンケート内容の翻訳（内容がある場合のみ）
+        if (pollContent) {
+          try {
+            translatedPoll = await translationService.translateMessage(
+              message.id,
+              userId,
+              sourceId,
+              pollContent
+            );
+            // 翻訳結果をDBに更新
+            await postRepository.updateTranslatedText(message.id, translatedPoll);
+          } catch (e) {
+            console.error('Poll translation failed:', e);
+          }
+        }
+
+        const flexMessage = createPollFlexMessage(message.id, services.env.BASE_URL);
+        const messagesToSend = [];
+
+        if (translatedPoll) {
+          messagesToSend.push({
             type: 'text',
-            text: translatedText,
-          },
-        ]);
+            text: translatedPoll,
+          });
+        }
+        messagesToSend.push(flexMessage);
+
+        if (event.replyToken) {
+          await lineClient.replyMessage(event.replyToken, messagesToSend);
+        }
+      } else {
+        // 通常の翻訳サービスを呼び出す
+        const translatedText = await translationService.translateMessage(
+          message.id,
+          userId,
+          sourceId,
+          message.text
+        );
+
+        // 翻訳結果があれば返信する
+        if (translatedText && event.replyToken) {
+          await lineClient.replyMessage(event.replyToken, [
+            {
+              type: 'text',
+              text: translatedText,
+            },
+          ]);
+        }
       }
     } else {
       console.log(`Received a non-text message type: ${event.message.type}`);
+    }
+  }
+
+  /**
+   * @method handlePostbackEvent
+   * @description ポストバックイベントを処理します。
+   * @param {PostbackEvent} event 処理するポストバックイベント
+   * @param {ServiceCollection} services サービスとリポジトリのインスタンス
+   */
+  private async handlePostbackEvent(event: PostbackEvent, services: ServiceCollection): Promise<void> {
+    const { answerRepository, lineClient } = services;
+    const data = event.postback.data;
+    const params = new URLSearchParams(data);
+    const action = params.get('action');
+
+    if (action === 'answer') {
+      const userId = event.source.userId;
+      if (!userId) return;
+
+      const value = params.get('value');
+      const pollPostId = params.get('postId');
+
+      if (value && pollPostId) {
+        // ローディングアニメーションを表示
+        try {
+          await lineClient.startLoadingAnimation(userId, 5);
+        } catch (e) {
+          console.warn('Failed to start loading animation for postback:', e);
+        }
+
+        // 回答を保存/更新
+        await answerRepository.upsert({
+          answer_id: crypto.randomUUID(), // 新規作成時はUUIDを生成（upsertのConflict時は無視される）
+          timestamp: new Date(event.timestamp).toISOString(),
+          poll_post_id: pollPostId,
+          user_id: userId,
+          answer_value: value,
+        });
+
+        console.log(`Answer recorded: User ${userId} answered ${value} to post ${pollPostId}`);
+      }
     }
   }
 }
