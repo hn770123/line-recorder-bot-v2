@@ -200,6 +200,8 @@ export class LineWebhookHandler {
       const message = event.message as TextMessage;
       const checkRegex = /\[check\]/i;
       const hasPoll = checkRegex.test(message.text);
+      // ユーザー名更新コマンドの判定
+      const nameMatch = message.text.match(/私(?:の名前|)は"(.+?)"/);
 
       // 投稿をDBに保存
       await postRepository.create({
@@ -213,6 +215,39 @@ export class LineWebhookHandler {
       });
 
       console.log(`Text message from ${userId} in ${sourceId || 'private chat'}: ${message.text}`);
+
+      if (nameMatch) {
+        const newName = nameMatch[1];
+        // ユーザー名を更新
+        await userRepository.upsert({ user_id: userId, display_name: newName });
+
+        const confirmationMessage = `名前を「${newName}」に更新しました。`;
+
+        // ユーザーの入力を翻訳
+        const translatedUserMessage = await translationService.translateMessage(
+          message.id,
+          userId,
+          sourceId,
+          message.text
+        );
+
+        const messagesToSend = [];
+        if (translatedUserMessage) {
+          messagesToSend.push({
+            type: 'text',
+            text: translatedUserMessage,
+          });
+        }
+        messagesToSend.push({
+          type: 'text',
+          text: confirmationMessage,
+        });
+
+        if (event.replyToken) {
+          await lineClient.replyMessage(event.replyToken, messagesToSend);
+        }
+        return;
+      }
 
       // LoadingアニメーションはProducer側で実行済みのため、ここでは削除
 
