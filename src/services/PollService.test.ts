@@ -31,6 +31,7 @@ describe('PollService', () => {
       LINE_CHANNEL_ACCESS_TOKEN: 'mock_token',
       LINE_CHANNEL_SECRET: 'mock_secret',
       GEMINI_API_KEY: 'mock_gemini_key',
+      BASE_URL: 'https://example.com',
     };
 
     // モックされたインスタンスを取得

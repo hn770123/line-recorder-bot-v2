@@ -19,8 +19,10 @@ export class PollService {
   private lineClient: LineClient;
   private postRepository: PostRepository;
   private answerRepository: AnswerRepository;
+  private env: Env;
 
   constructor(env: Env) {
+    this.env = env;
     this.lineClient = new LineClient(env);
     this.postRepository = new PostRepository(env);
     this.answerRepository = new AnswerRepository(env);
@@ -160,7 +162,7 @@ export class PollService {
                   action: {
                     type: 'uri',
                     label: '結果を見る',
-                    uri: `https://your-worker-domain.com/poll/${postId}`, // TODO: ドメインは環境変数から取得
+                    uri: `${this.env.BASE_URL}/poll/${postId}`,
                   },
                   style: 'link',
                   margin: 'md',

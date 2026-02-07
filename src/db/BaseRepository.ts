@@ -21,6 +21,7 @@ export interface Env {
   GEMINI_API_KEY: string;
   BYPASS_LINE_VALIDATION: string;
   LINE_BOT_QUEUE: Queue<any>;
+  BASE_URL: string;
 }
 
 export class BaseRepository {
