@@ -181,4 +181,34 @@ describe('GeminiClient', () => {
     // Total 3 calls: 1 (Model 1) + 2 (Model 2)
     expect(mocks.sendMessage).toHaveBeenCalledTimes(3);
   });
+
+  it('should wait between 2-5 seconds when 503 error occurs', async () => {
+    const expectedText = 'Response after 503 retry';
+
+    // Mock Math.random to return 0.5.
+    // Logic: Math.floor(0.5 * 3001) + 2000 = Math.floor(1500.5) + 2000 = 1500 + 2000 = 3500
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    // Spy on setTimeout to verify delay
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+
+    // First attempt fails with 503
+    mocks.sendMessage.mockRejectedValueOnce({ response: { status: 503 } });
+
+    // Second attempt (retry) succeeds
+    mocks.sendMessage.mockResolvedValueOnce({
+      response: {
+        text: () => expectedText,
+      },
+    });
+
+    const promise = geminiClient.generateText('Test prompt');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBe(expectedText);
+
+    // Verify setTimeout was called with 3500ms
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3500);
+  });
 });

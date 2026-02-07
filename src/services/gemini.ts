@@ -81,8 +81,18 @@ export class GeminiClient {
              break; // Break inner loop to continue to next model in outer loop
           }
 
-          // 500 Internal Server Error, 503 Service Unavailable: Retry on same model
-          if (status === 500 || status === 503) {
+          // 503 Service Unavailable: Retry on same model with random delay (2-5s)
+          if (status === 503) {
+             if (i < retries - 1) {
+                // Wait 2000-5000ms
+                const delay = Math.floor(Math.random() * 3001) + 2000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue; // Retry inner loop
+             }
+             // Retries exhausted, loop will finish naturally
+          }
+          // 500 Internal Server Error: Retry on same model with exponential backoff
+          else if (status === 500) {
              if (i < retries - 1) {
                 const delay = Math.pow(2, i) * 1000; // Exponential backoff
                 await new Promise(resolve => setTimeout(resolve, delay));
