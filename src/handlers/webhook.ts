@@ -71,6 +71,7 @@ export class LineWebhookHandler {
       // メッセージイベントかつuserIdが存在する場合、Loadingアニメーションを表示
       if (event.type === 'message' && event.source && event.source.userId) {
         try {
+          console.log('startLoadingAnimation userId:', event.source.userId);
           await lineClient.startLoadingAnimation(event.source.userId, 60);
         } catch (e) {
           console.warn('Failed to start loading animation:', e);
