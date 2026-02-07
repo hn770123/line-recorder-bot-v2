@@ -71,7 +71,7 @@ export class LineWebhookHandler {
       // メッセージイベントかつuserIdが存在する場合、Loadingアニメーションを表示
       if (event.type === 'message' && event.source && event.source.userId) {
         try {
-          lineClient.startLoadingAnimation(event.source.userId, 60);
+          await lineClient.startLoadingAnimation(event.source.userId, 60);
         } catch (e) {
           console.warn('Failed to start loading animation:', e);
         }
@@ -89,6 +89,9 @@ export class LineWebhookHandler {
         // 現状はログ出力にとどめます。
       }
     }
+
+    // 0.5 秒待ってみる
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     return c.json({ message: 'ok' }, 200);
   }
