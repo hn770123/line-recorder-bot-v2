@@ -78,20 +78,18 @@ export class PollService {
   /**
    * @method buildPollFlexMessage
    * @description アンケート用のFlex Messageを構築します。
+   *              GASの実装(gas-src/code.gs)と一致するように修正しました。
    * @param {string} postId アンケートの元となる投稿ID
-   * @param {string} question 質問文
+   * @param {string} question 質問文（GAS版ではFlex Message内に表示しないが、altTextには使用）
    * @param {string | null} userId 質問者のユーザーID
    * @returns {FlexMessage} 構築されたFlex Messageオブジェクト
    */
   private buildPollFlexMessage(postId: string, question: string, userId: string | null): FlexMessage {
-    // ここでFlex MessageのJSON構造を構築します。
-    // LINEのFlex Message Simulator (https://developers.line.biz/flex-simulator/) を使うと便利です。
-    // 以下は非常にシンプルな例です。
+    const resultsUrl = `${this.env.BASE_URL}/poll/${postId}`;
 
-    // postback data の例: "action=vote&postId=xxx&answer=OK"
     return {
       type: 'flex',
-      altText: `アンケート: ${question}`,
+      altText: `アンケート`, // GASでは単に"アンケート"
       contents: {
         type: 'bubble',
         body: {
@@ -100,76 +98,70 @@ export class PollService {
           contents: [
             {
               type: 'text',
-              text: 'アンケート',
+              text: 'Select one. Can be changed.',
               weight: 'bold',
-              color: '#1DB446',
               size: 'sm',
             },
-            {
-              type: 'text',
-              text: question,
-              weight: 'bold',
-              size: 'md',
-              margin: 'md',
-              wrap: true,
-            },
-            {
-              type: 'separator',
-              margin: 'xxl',
-            },
+          ],
+        },
+        footer: {
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'sm',
+          contents: [
             {
               type: 'box',
-              layout: 'vertical',
-              margin: 'xxl',
+              layout: 'horizontal',
               spacing: 'sm',
               contents: [
                 {
                   type: 'button',
+                  style: 'primary',
+                  height: 'sm',
                   action: {
                     type: 'postback',
                     label: 'OK',
                     data: `action=vote&postId=${postId}&answer=OK`,
-                    displayText: 'OK',
                   },
-                  style: 'primary',
-                  color: '#1DB446',
                 },
                 {
                   type: 'button',
+                  style: 'secondary',
+                  height: 'sm',
                   action: {
                     type: 'postback',
                     label: 'NG',
                     data: `action=vote&postId=${postId}&answer=NG`,
-                    displayText: 'NG',
                   },
-                  style: 'primary',
-                  color: '#FF0000',
-                  margin: 'md',
                 },
                 {
                   type: 'button',
+                  style: 'secondary',
+                  height: 'sm',
                   action: {
                     type: 'postback',
-                    label: 'どちらでもない',
-                    data: `action=vote&postId=${postId}&answer=NA`,
-                    displayText: 'どちらでもない',
+                    label: 'N/A',
+                    data: `action=vote&postId=${postId}&answer=N/A`,
                   },
-                  style: 'secondary',
-                  margin: 'md',
-                },
-                {
-                  type: 'button',
-                  action: {
-                    type: 'uri',
-                    label: '結果を見る',
-                    uri: `${this.env.BASE_URL}/poll/${postId}`,
-                  },
-                  style: 'link',
-                  margin: 'md',
                 },
               ],
             },
+            {
+              type: 'separator',
+              margin: 'sm',
+            },
+            {
+              type: 'button',
+              style: 'link',
+              height: 'sm',
+              action: {
+                type: 'uri',
+                label: 'See results',
+                uri: resultsUrl,
+              },
+            },
           ],
+          flex: 0,
         },
       },
     };
