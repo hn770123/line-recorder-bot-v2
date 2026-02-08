@@ -105,7 +105,7 @@ export class PollResultHandler {
                 </thead>
                 <tbody>
                   ${answers.map((answer) => {
-                    const date = new Date(answer.timestamp).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+                    const date = new Date(answer.timestamp).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Tokyo' });
                     // display_nameが型の定義上存在しない場合はanyキャスト等が必要だが、
                     // getAnswersWithUserNamesの実装依存。ここではanyキャストして回避するか、
                     // 以前のコードが通っていたので、Answer型にdisplay_nameが含まれているか、
