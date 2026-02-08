@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { basicAuth } from 'hono/basic-auth'
 import { html } from 'hono/html'
 import { Env } from '../db/BaseRepository'
+import { PostRepository } from '../db/PostRepository'
 
 const admin = new Hono<{ Bindings: Env }>()
 
@@ -79,7 +80,10 @@ admin.get('/table/:tableName', async (c) => {
             ${rows.map(row => html`
               <tr>
                 ${columns.map(col => html`<td>${(row as any)[col]}</td>`)}
-                ${tableName === 'users' ? html`<td><a href="/admin/users/${(row as any).user_id}/edit">Edit</a></td>` : ''}
+                ${tableName === 'users' ? html`<td>
+                  <a href="/admin/users/${(row as any).user_id}/edit">Edit</a>
+                  <a href="/admin/users/${(row as any).user_id}/posts">Posts</a>
+                </td>` : ''}
               </tr>
             `)}
           </tbody>
@@ -138,6 +142,54 @@ admin.post('/users/:userId/edit', async (c) => {
     .run();
 
   return c.redirect('/admin/table/users');
+})
+
+admin.get('/users/:userId/posts', async (c) => {
+  const userId = c.req.param('userId');
+  const postRepository = new PostRepository(c.env);
+  const posts = await postRepository.findAllByUserId(userId, 100);
+
+  return c.html(html`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>User Posts</title>
+        <style>
+          body { font-family: sans-serif; padding: 20px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f2f2f2; }
+          .back { margin-bottom: 20px; display: inline-block; }
+        </style>
+      </head>
+      <body>
+        <a href="/admin/table/users" class="back">Back to Users</a>
+        <h1>Posts for User: ${userId}</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Room ID</th>
+              <th>Message</th>
+              <th>Poll</th>
+              <th>Translated Text</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${posts.map(post => html`
+              <tr>
+                <td>${post.timestamp}</td>
+                <td>${post.room_id || '-'}</td>
+                <td>${post.message_text}</td>
+                <td>${post.has_poll ? 'Yes' : 'No'}</td>
+                <td>${post.translated_text || '-'}</td>
+              </tr>
+            `)}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `)
 })
 
 export { admin }
