@@ -65,6 +65,26 @@ describe('Admin Handler', () => {
     const text = await res.text()
     expect(text).toContain('Test User')
     expect(text).toContain('Edit') // Should have Edit link for users
+    expect(text).toContain('Posts') // Should have Posts link for users
+  })
+
+  it('should view user posts', async () => {
+    const { env, stmt } = createMockEnv()
+    const credentials = btoa('admin:secret_password')
+
+    const mockPosts = [
+      { post_id: 'p1', timestamp: '2023-01-01', user_id: 'u1', message_text: 'Hello', has_poll: 0 }
+    ];
+    stmt.all.mockResolvedValue({ results: mockPosts });
+
+    const res = await admin.request('http://localhost/users/u1/posts', {
+        headers: { Authorization: `Basic ${credentials}` }
+    }, env)
+
+    expect(res.status).toBe(200)
+    const text = await res.text()
+    expect(text).toContain('Posts for User: u1')
+    expect(text).toContain('Hello')
   })
 
   it('should show edit form', async () => {

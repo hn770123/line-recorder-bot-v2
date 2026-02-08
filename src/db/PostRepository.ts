@@ -79,6 +79,23 @@ export class PostRepository extends BaseRepository {
   }
 
   /**
+   * @method findAllByUserId
+   * @description 指定されたユーザーIDのすべての投稿を指定数だけ取得します。
+   * @param {string} userId ユーザーID
+   * @param {number} limit 取得する投稿の最大数
+   * @returns {Promise<Post[]>} 投稿の配列
+   */
+  async findAllByUserId(userId: string, limit: number): Promise<Post[]> {
+    const query = `
+      SELECT * FROM posts
+      WHERE user_id = ?
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `;
+    return await this.queryAll<Post>(query, [userId, limit]);
+  }
+
+  /**
    * @method updateTranslatedText
    * @description 投稿の翻訳済みテキストを更新します。
    * @param {string} postId 更新する投稿のID
